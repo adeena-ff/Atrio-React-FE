@@ -1,26 +1,3 @@
-import { LogOut } from 'lucide-react'
+import { Bell, LogOut, Menu } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-
-export function Navbar() {
-  const { user, logout } = useAuth()
-
-  return (
-    <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
-      <div>
-        <p className="text-sm font-medium text-slate-900">Atrio</p>
-        <p className="text-xs text-slate-500">Zynthra Technologies</p>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-slate-600">{user?.fullName ?? 'Guest'}</span>
-        <button
-          type="button"
-          onClick={logout}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          <LogOut size={16} />
-          Sign out
-        </button>
-      </div>
-    </header>
-  )
-}
+export function Navbar() { const { user, logout } = useAuth(); return <header className="glass sticky top-0 z-10 flex h-18 items-center justify-between border-x-0 border-t-0 px-4 sm:px-8"><div className="flex items-center gap-3"><button className="rounded-lg p-2 text-slate-300 md:hidden"><Menu size={20} /></button><div><p className="font-semibold text-white">Good morning, {user?.fullName?.split(' ')[0] ?? 'Avery'}</p><p className="text-xs text-slate-400">Tuesday, August 25, 2026</p></div></div><div className="flex items-center gap-2"><button className="relative rounded-lg p-2 text-slate-300 hover:bg-slate-800"><Bell size={19} /><i className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" /></button><button onClick={logout} className="btn-secondary px-3 py-2 text-sm"><LogOut size={16} /><span className="hidden sm:inline">Sign out</span></button></div></header> }

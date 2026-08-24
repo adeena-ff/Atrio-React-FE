@@ -1,20 +1,5 @@
+import { AlertTriangle, ArrowUpRight, BookOpen, Users } from 'lucide-react'
 import { PageHeader } from '../components/common/PageHeader'
-
-export function Dashboard() {
-  return (
-    <section>
-      <PageHeader
-        title="Dashboard"
-        description="Overview of classes, students, and attendance activity."
-      />
-      <div className="grid gap-4 md:grid-cols-3">
-        {['Students', 'Classes', 'Attendance records'].map((label) => (
-          <article key={label} className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-sm text-slate-500">{label}</p>
-            <p className="mt-2 text-2xl font-semibold">0</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  )
-}
+import { students, trend } from '../data/mockData'
+const stats = [{ label: 'Total Students', value: '109', detail: '+8 this term', icon: Users, tone: 'text-indigo-300 bg-indigo-500/15' }, { label: "Today's Attendance", value: '93.4%', detail: '+2.1% vs last week', icon: ArrowUpRight, tone: 'text-emerald-300 bg-emerald-500/15' }, { label: 'Active Classes', value: '12', detail: '4 sessions today', icon: BookOpen, tone: 'text-blue-300 bg-blue-500/15' }, { label: 'Needs Attention', value: '4', detail: 'Below 75% attendance', icon: AlertTriangle, tone: 'text-amber-300 bg-amber-500/15' }]
+export function Dashboard() { return <section><PageHeader title="Attendance at a glance" description="A live-feeling overview powered by UI mock data." /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(({ label, value, detail, icon: Icon, tone }) => <article key={label} className="glass rounded-2xl p-5"><div className="flex items-start justify-between"><div><p className="text-sm text-slate-400">{label}</p><p className="mt-2 text-3xl font-bold text-white">{value}</p></div><div className={`rounded-xl p-3 ${tone}`}><Icon size={20} /></div></div><p className="mt-4 text-xs text-slate-400">{detail}</p></article>)}</div><div className="mt-6 grid gap-6 xl:grid-cols-[1.7fr_1fr]"><article className="glass rounded-2xl p-6"><div className="flex items-center justify-between"><div><h2 className="font-semibold text-white">Attendance trend</h2><p className="text-sm text-slate-400">Last seven teaching days</p></div><span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-300">93.4% average</span></div><div className="mt-8 flex h-52 items-end gap-3">{trend.map((value, index) => <div key={value + index} className="flex flex-1 flex-col items-center gap-2"><div className="w-full rounded-t-lg bg-gradient-to-t from-indigo-600 to-blue-400" style={{ height: `${value * 1.8}px` }} /><span className="text-xs text-slate-500">{['M', 'T', 'W', 'T', 'F', 'M', 'T'][index]}</span></div>)}</div></article><article className="glass rounded-2xl p-6"><h2 className="font-semibold text-white">Low-attendance alerts</h2><p className="mb-4 text-sm text-slate-400">Students needing follow-up</p>{students.filter(s => s.attendance < 85).map(student => <div key={student.id} className="mb-3 flex items-center justify-between rounded-xl bg-slate-950/40 p-3"><div><p className="text-sm font-medium text-slate-200">{student.name}</p><p className="text-xs text-slate-500">{student.className}</p></div><span className="text-sm font-semibold text-rose-300">{student.attendance}%</span></div>)}<button className="mt-1 text-sm font-medium text-indigo-300">View all alerts →</button></article></div></section> }

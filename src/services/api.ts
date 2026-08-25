@@ -15,4 +15,16 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('atrio_token')
+      localStorage.removeItem('atrio_user')
+      if (window.location.pathname !== '/login') window.location.assign('/login')
+    }
+    return Promise.reject(error)
+  },
+)
+
 export default apiClient

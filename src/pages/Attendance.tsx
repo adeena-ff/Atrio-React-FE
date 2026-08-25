@@ -1,12 +1,7 @@
+import { CalendarDays, CheckCheck, RotateCcw } from 'lucide-react'
+import { useState } from 'react'
 import { PageHeader } from '../components/common/PageHeader'
-
-export function Attendance() {
-  return (
-    <section>
-      <PageHeader title="Attendance" description="Mark and review daily student attendance." />
-      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-500">
-        Attendance marking UI will be connected in a later sprint.
-      </div>
-    </section>
-  )
-}
+import { students, statusStyles } from '../data/mockData'
+import type { AttendanceStatus } from '../types'
+const cycle: AttendanceStatus[] = ['Present', 'Absent', 'Late']
+export function Attendance() { const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>(() => Object.fromEntries(students.map(s => [s.id, s.status as AttendanceStatus]))); const counts = Object.values(statuses).reduce<Record<string, number>>((a, v) => ({ ...a, [v]: (a[v] ?? 0) + 1 }), {}); const toggle = (id: string) => setStatuses(current => ({ ...current, [id]: cycle[(cycle.indexOf(current[id]) + 1) % cycle.length] })); return <section><PageHeader title="Mark attendance" description="Click a status to cycle Present, Absent, and Late." action={<button className="btn-primary"><CheckCheck size={18} />Save attendance</button>} /><div className="glass mb-5 flex flex-col gap-3 rounded-2xl p-4 md:flex-row"><select className="field md:w-64"><option>Mathematics 10A</option><option>Physics 11B</option><option>Computer Science</option></select><label className="relative flex-1"><CalendarDays className="absolute left-3 top-3 text-slate-500" size={18} /><input className="field pl-10" type="date" defaultValue="2026-08-25" /></label><button className="btn-secondary"><RotateCcw size={17} />Reset</button></div><div className="mb-4 flex flex-wrap gap-2">{(['Present', 'Absent', 'Late'] as AttendanceStatus[]).map(s => <span key={s} className={`rounded-full border px-3 py-1 text-xs ${statusStyles[s]}`}>{counts[s] ?? 0} {s}</span>)}</div><div className="glass overflow-hidden rounded-2xl"><div className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-700/50 px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500"><span>Student</span><span>Today's status</span></div>{students.map((student, index) => <div key={student.id} className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-slate-700/40 px-5 py-4 last:border-0"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-slate-700 text-xs text-slate-300">{index + 1}</span><div><p className="font-medium text-white">{student.name}</p><p className="text-xs text-slate-500">{student.enrollment}</p></div></div><button onClick={() => toggle(student.id)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition hover:scale-105 ${statusStyles[statuses[student.id]]}`}>{statuses[student.id]}</button></div>)}</div></section> }

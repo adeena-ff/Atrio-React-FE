@@ -29,6 +29,7 @@ export interface StudentDto {
   classId: string
   className?: string
   isActive: boolean
+  attendancePercentage: number
 }
 
 export interface CreateStudentDto {
@@ -45,6 +46,7 @@ export interface ClassDto {
   code: string
   academicYear: string
   isActive: boolean
+  studentCount: number
 }
 
 export interface CreateClassDto {
@@ -56,6 +58,7 @@ export interface CreateClassDto {
 export interface AttendanceRecordDto {
   id: string
   studentId: string
+  studentName: string
   classId: string
   recordedByUserId: string
   attendanceDate: string
@@ -70,3 +73,7 @@ export interface CreateAttendanceRecordDto {
   status: AttendanceStatus
   notes?: string
 }
+
+export interface DashboardDto { totalStudents: number; activeClasses: number; todayAttendancePercentage: number; lowAttendanceAlerts: number }
+export interface StudentMonthlyRowDto { studentId: string; studentName: string; enrollmentNumber: string; present: number; absent: number; late: number; excused: number; percentage: number }
+export interface MonthlyReportDto { year: number; month: number; className?: string; overallPercentage: number; students: StudentMonthlyRowDto[] }

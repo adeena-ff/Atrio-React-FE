@@ -1,4 +1,4 @@
-import { CalendarCheck, LockKeyhole, Mail } from 'lucide-react'
+import { CalendarCheck, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -9,8 +9,10 @@ export function Login() {
   const [role, setRole] = useState<'Admin' | 'Teacher'>('Admin')
   const [email, setEmail] = useState('admin@atrio.com')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const hasPassword = password.length > 0
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -91,13 +93,27 @@ export function Login() {
             <div className="relative mt-2">
               <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={17} />
               <input
-                className="field field-with-icon"
-                type="password"
+                className="field field-with-icon field-with-trailing-icon"
+                type={hasPassword && showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setPassword(next)
+                  if (!next) setShowPassword(false)
+                }}
                 required
                 autoComplete="current-password"
               />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-slate-400 transition enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                onClick={() => setShowPassword((v) => !v)}
+                disabled={!hasPassword}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                tabIndex={hasPassword ? 0 : -1}
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
             </div>
           </label>
 

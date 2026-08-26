@@ -1,5 +1,5 @@
-import { Check, CheckCheck, Clock3, ShieldCheck, UserRound, X } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { Check, CheckCheck, Clock3, LoaderCircle, ShieldCheck, UserRound, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
 import { useAuth } from '../context/AuthContext'
@@ -16,23 +16,49 @@ const statusIcons: Record<AttendanceStatus, typeof Check> = {
   Excused: ShieldCheck,
 }
 
-const statusStyles: Record<AttendanceStatus, { idle: string; active: string }> = {
+const statusStyles: Record<
+  AttendanceStatus,
+  { idle: string; active: string; glow: string; text: string }
+> = {
   Present: {
-    idle: 'border-emerald-400/20 bg-emerald-500/5 text-emerald-200/70 hover:bg-emerald-500/10',
-    active: 'border-emerald-400/40 bg-emerald-500/25 text-emerald-100 shadow-lg shadow-emerald-950/40',
+    idle: 'border-emerald-400/25 bg-emerald-500/5 text-emerald-200/75 hover:bg-emerald-500/15 hover:scale-[1.03]',
+    active:
+      'border-emerald-400/50 bg-gradient-to-br from-emerald-500/35 to-emerald-600/20 text-emerald-50 shadow-[0_0_24px_rgba(16,185,129,0.35)] scale-[1.04]',
+    glow: 'bg-emerald-400',
+    text: 'text-emerald-300',
   },
   Late: {
-    idle: 'border-amber-400/20 bg-amber-500/5 text-amber-200/70 hover:bg-amber-500/10',
-    active: 'border-amber-400/40 bg-amber-500/25 text-amber-100 shadow-lg shadow-amber-950/40',
+    idle: 'border-amber-400/25 bg-amber-500/5 text-amber-200/75 hover:bg-amber-500/15 hover:scale-[1.03]',
+    active:
+      'border-amber-400/50 bg-gradient-to-br from-amber-500/35 to-amber-600/20 text-amber-50 shadow-[0_0_24px_rgba(245,158,11,0.35)] scale-[1.04]',
+    glow: 'bg-amber-400',
+    text: 'text-amber-300',
   },
   Absent: {
-    idle: 'border-rose-400/20 bg-rose-500/5 text-rose-200/70 hover:bg-rose-500/10',
-    active: 'border-rose-400/40 bg-rose-500/25 text-rose-100 shadow-lg shadow-rose-950/40',
+    idle: 'border-rose-400/25 bg-rose-500/5 text-rose-200/75 hover:bg-rose-500/15 hover:scale-[1.03]',
+    active:
+      'border-rose-400/50 bg-gradient-to-br from-rose-500/35 to-rose-600/20 text-rose-50 shadow-[0_0_24px_rgba(244,63,94,0.35)] scale-[1.04]',
+    glow: 'bg-rose-400',
+    text: 'text-rose-300',
   },
   Excused: {
-    idle: 'border-sky-400/20 bg-sky-500/5 text-sky-200/70 hover:bg-sky-500/10',
-    active: 'border-sky-400/40 bg-sky-500/25 text-sky-100 shadow-lg shadow-sky-950/40',
+    idle: 'border-indigo-400/25 bg-indigo-500/5 text-indigo-200/75 hover:bg-indigo-500/15 hover:scale-[1.03]',
+    active:
+      'border-indigo-400/50 bg-gradient-to-br from-indigo-500/35 to-violet-600/20 text-indigo-50 shadow-[0_0_24px_rgba(99,102,241,0.4)] scale-[1.04]',
+    glow: 'bg-indigo-400',
+    text: 'text-indigo-300',
   },
+}
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
 }
 
 export function Attendance() {
@@ -43,8 +69,14 @@ export function Attendance() {
   const [records, setRecords] = useState<AttendanceRecordDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const { classes: visibleClasses, label: classLabel, isScopedToAssignments } = useVisibleClasses(classes)
   const assignedClassIds = user?.assignedClassIds
+
+  const selectedClass = useMemo(
+    () => visibleClasses.find((c) => c.id === classId),
+    [visibleClasses, classId],
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -56,7 +88,8 @@ export function Attendance() {
         isTeacher && assignedClassIds?.length
           ? result.data.filter((c) => assignedClassIds.includes(c.id))
           : result.data
-      const selected = (classId && scoped.some((c) => c.id === classId) ? classId : undefined) || scoped[0]?.id
+      const selected =
+        (classId && scoped.some((c) => c.id === classId) ? classId : undefined) || scoped[0]?.id
       if (selected) {
         setClassId(selected)
         setRecords(
@@ -80,8 +113,15 @@ export function Attendance() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (saveState !== 'saved') return
+    const timer = window.setTimeout(() => setSaveState('idle'), 1800)
+    return () => window.clearTimeout(timer)
+  }, [saveState])
+
   const mark = async (record: AttendanceRecordDto, status: AttendanceStatus) => {
     if (record.status === status) return
+    setSaveState('saving')
     setRecords((current) =>
       current.map((r) => (r.studentId === record.studentId ? { ...r, status } : r)),
     )
@@ -92,7 +132,9 @@ export function Attendance() {
         attendanceDate: date,
         status,
       })
+      setSaveState('saved')
     } catch (e) {
+      setSaveState('error')
       setError(errorMessage(e, 'Attendance status could not be saved.'))
       void load()
     }
@@ -101,24 +143,42 @@ export function Attendance() {
   const markAllPresent = async () => {
     const changed = records.filter((record) => record.status !== 'Present')
     if (changed.length === 0) return
+    setSaveState('saving')
     setRecords((current) => current.map((record) => ({ ...record, status: 'Present' })))
     try {
-      await Promise.all(changed.map((record) => apiClient.post('/attendance/mark', {
-        studentId: record.studentId, classId, attendanceDate: date, status: 'Present',
-      })))
+      await Promise.all(
+        changed.map((record) =>
+          apiClient.post('/attendance/mark', {
+            studentId: record.studentId,
+            classId,
+            attendanceDate: date,
+            status: 'Present',
+          }),
+        ),
+      )
+      setSaveState('saved')
     } catch (e) {
+      setSaveState('error')
       setError(errorMessage(e, 'Some attendance updates could not be saved.'))
       void load()
     }
   }
 
-  const statusCount = (status: AttendanceStatus) => records.filter((record) => record.status === status).length
+  const statusCount = (status: AttendanceStatus) =>
+    records.filter((record) => record.status === status).length
+
+  const presentRate =
+    records.length === 0
+      ? 0
+      : Math.round(
+          ((statusCount('Present') + statusCount('Late')) / records.length) * 100,
+        )
 
   return (
-    <section>
+    <section className="space-y-6">
       <PageHeader
         title="Mark attendance"
-        description="Select Present, Late, Absent, or Excused for each student — changes save immediately."
+        description="Tactile status pills save instantly — use Mark all present for a quick fill."
         action={
           <button className="btn-primary" onClick={() => void load()}>
             <CheckCheck size={18} />
@@ -129,10 +189,12 @@ export function Attendance() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      <div className="glass mb-6 grid gap-3 rounded-2xl p-4 shadow-xl sm:grid-cols-2 sm:p-5">
+      <div className="glass grid gap-3 rounded-2xl p-4 shadow-xl sm:grid-cols-2 sm:p-5">
         <div>
           {isScopedToAssignments && (
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-indigo-300">{classLabel}</p>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-indigo-300">
+              {classLabel}
+            </p>
           )}
           <select
             className="field px-4 py-2.5"
@@ -159,60 +221,131 @@ export function Attendance() {
         <LoadingState label="Loading roll call..." />
       ) : (
         <div className="glass overflow-hidden rounded-2xl shadow-xl">
-          <div className="flex flex-col gap-4 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+          <div className="flex flex-col gap-4 border-b border-white/10 bg-gradient-to-br from-indigo-500/10 via-transparent to-violet-500/5 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
               <p className="text-xs font-semibold tracking-[0.14em] text-indigo-300">LIVE ROLL CALL</p>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">{records.length} learners ready to review</h2>
-              <p className="mt-1 text-sm text-slate-400">Every selection saves immediately. You can safely revisit any historical date.</p>
+              <h2 className="mt-1 truncate text-xl font-semibold tracking-tight text-white">
+                {selectedClass?.name ?? 'Select a class'}
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                <span className="font-semibold text-white">{records.length}</span> learners ·{' '}
+                <span className="font-semibold text-emerald-300">{presentRate}%</span> present/late
+              </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {statuses.map((status) => (
-                <span key={status} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${statusStyles[status].idle}`}>
-                  {statusCount(status)} {status.toLowerCase()}
-                </span>
-              ))}
-              <button type="button" className="btn-secondary text-sm" onClick={() => void markAllPresent()}>
-                <CheckCheck size={16} /> Mark all present
-              </button>
+
+            <div className="flex flex-col gap-3 sm:items-end">
+              <div className="flex flex-wrap gap-2">
+                {statuses.map((status) => (
+                  <span
+                    key={status}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${statusStyles[status].idle}`}
+                  >
+                    <i className={`h-1.5 w-1.5 rounded-full ${statusStyles[status].glow}`} />
+                    {statusCount(status)} {status}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary text-sm"
+                  onClick={() => void markAllPresent()}
+                  disabled={records.length === 0 || saveState === 'saving'}
+                >
+                  <CheckCheck size={16} /> Mark all present
+                </button>
+                <SaveFeedback state={saveState} />
+              </div>
             </div>
           </div>
-          {records.map((record) => (
-            <div
-              key={record.studentId}
-              className="flex flex-col gap-4 border-b border-white/5 px-4 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-400/20">
-                  <UserRound size={18} />
+
+          <div className="divide-y divide-white/5">
+            {records.map((record) => {
+              const styles = statusStyles[record.status]
+              const roll =
+                record.enrollmentNumber ||
+                `ID-${record.studentId.slice(0, 6).toUpperCase()}`
+              return (
+                <div
+                  key={record.studentId}
+                  className="flex flex-col gap-4 px-4 py-4 transition hover:bg-white/[0.03] sm:px-5 lg:flex-row lg:items-center lg:justify-between"
+                >
+                  <div className="flex min-w-0 items-start gap-3 sm:items-center">
+                    <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500/25 to-violet-600/20 text-sm font-bold text-indigo-100 ring-1 ring-indigo-400/25">
+                      {initials(record.studentName) || <UserRound size={18} />}
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-slate-900 ${styles.glow}`}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-semibold tracking-tight text-white">
+                          {record.studentName}
+                        </p>
+                        <span className="rounded-full border border-white/10 bg-slate-950/50 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-slate-300">
+                          {roll}
+                        </span>
+                      </div>
+                      <p className={`mt-1 text-sm font-medium ${styles.text}`}>
+                        Current: {record.status}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    role="group"
+                    aria-label={`Status for ${record.studentName}`}
+                    className="grid grid-cols-2 gap-2 sm:inline-flex sm:flex-wrap sm:rounded-2xl sm:border sm:border-white/10 sm:bg-slate-950/40 sm:p-1.5"
+                  >
+                    {statuses.map((status) => {
+                      const active = record.status === status
+                      const Icon = statusIcons[status]
+                      const tone = statusStyles[status]
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => void mark(record, status)}
+                          className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 active:scale-95 sm:min-w-[5.5rem] ${
+                            active ? tone.active : tone.idle
+                          }`}
+                        >
+                          <Icon size={14} />
+                          {status}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate font-semibold tracking-tight text-white">{record.studentName}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{record.status === 'Present' ? 'Ready for class' : `Marked ${record.status.toLowerCase()}`}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                {statuses.map((status) => {
-                  const active = record.status === status
-                  const styles = statusStyles[status]
-                  const Icon = statusIcons[status]
-                  return (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={() => void mark(record, status)}
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 active:scale-95 sm:min-w-24 ${
-                        active ? styles.active : styles.idle
-                      }`}
-                    >
-                      <Icon size={14} /> {status}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+              )
+            })}
+            {records.length === 0 && (
+              <p className="px-5 py-12 text-center text-sm text-slate-500">
+                No students in this roll call.
+              </p>
+            )}
+          </div>
         </div>
       )}
     </section>
+  )
+}
+
+function SaveFeedback({ state }: { state: SaveState }) {
+  if (state === 'idle') return null
+  if (state === 'saving') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
+        <LoaderCircle size={14} className="animate-spin" /> Saving…
+      </span>
+    )
+  }
+  if (state === 'error') {
+    return <span className="text-xs font-medium text-rose-300">Save failed</span>
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+      <Check size={14} /> Saved
+    </span>
   )
 }

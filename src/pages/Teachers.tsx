@@ -10,7 +10,7 @@ const emptyForm: CreateTeacherDto = {
   fullName: '',
   email: '',
   password: '',
-  classIds: [],
+  assignedClassIds: [],
 }
 
 export function Teachers() {
@@ -56,7 +56,7 @@ export function Teachers() {
       fullName: teacher.fullName,
       email: teacher.email,
       password: '',
-      classIds: teacher.assignedClasses.map((c) => c.id),
+      assignedClassIds: teacher.assignedClassIds,
     })
     setShowModal(true)
   }
@@ -64,9 +64,9 @@ export function Teachers() {
   const toggleClass = (classId: string) => {
     setForm((current) => ({
       ...current,
-      classIds: current.classIds.includes(classId)
-        ? current.classIds.filter((id) => id !== classId)
-        : [...current.classIds, classId],
+      assignedClassIds: current.assignedClassIds.includes(classId)
+        ? current.assignedClassIds.filter((id) => id !== classId)
+        : [...current.assignedClassIds, classId],
     }))
   }
 
@@ -79,7 +79,7 @@ export function Teachers() {
         const payload: UpdateTeacherDto = {
           fullName: form.fullName,
           email: form.email,
-          classIds: form.classIds,
+          assignedClassIds: form.assignedClassIds,
           isActive: editing.isActive,
         }
         await updateTeacher(editing.id, payload)
@@ -156,20 +156,23 @@ export function Teachers() {
                     <td className="px-4 py-4">{teacher.email}</td>
                     <td className="px-4 py-4">
                       <div className="flex flex-wrap gap-1.5">
-                        {teacher.assignedClasses.length === 0 ? (
+                        {teacher.assignedClassIds.length === 0 ? (
                           <span className="text-xs text-slate-500">None assigned</span>
                         ) : (
-                          teacher.assignedClasses.map((c) => (
+                          teacher.assignedClassIds.map((classId) => {
+                            const assignedClass = classes.find((c) => c.id === classId)
+                            return (
                             <span
-                              key={c.id}
+                              key={classId}
                               className="rounded-full border border-indigo-400/25 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-200"
                             >
-                              {c.code}
+                              {assignedClass?.code ?? 'Assigned class'}
                             </span>
-                          ))
+                            )
+                          })
                         )}
                         <span className="self-center text-xs text-slate-500">
-                          ({teacher.assignedClasses.length})
+                          ({teacher.assignedClassIds.length})
                         </span>
                       </div>
                     </td>
@@ -263,7 +266,7 @@ export function Teachers() {
                   <label key={c.id} className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
                     <input
                       type="checkbox"
-                      checked={form.classIds.includes(c.id)}
+                      checked={form.assignedClassIds.includes(c.id)}
                       onChange={() => toggleClass(c.id)}
                       className="rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
                     />

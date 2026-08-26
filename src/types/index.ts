@@ -57,31 +57,25 @@ export interface CreateClassDto {
   academicYear: string
 }
 
-export interface TeacherClassSummaryDto {
-  id: string
-  name: string
-  code: string
-}
-
 export interface TeacherDto {
   id: string
   fullName: string
   email: string
   isActive: boolean
-  assignedClasses: TeacherClassSummaryDto[]
+  assignedClassIds: string[]
 }
 
 export interface CreateTeacherDto {
   fullName: string
   email: string
   password: string
-  classIds: string[]
+  assignedClassIds: string[]
 }
 
 export interface UpdateTeacherDto {
   fullName: string
   email: string
-  classIds: string[]
+  assignedClassIds: string[]
   isActive?: boolean
 }
 

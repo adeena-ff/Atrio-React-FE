@@ -21,9 +21,16 @@ import { useAuth } from '../context/AuthContext'
 import { getDashboardAnalytics } from '../services/api'
 import type { DashboardAnalyticsDto } from '../types'
 
+const emptyMetrics = {
+  totalStudents: 0,
+  activeClasses: 0,
+  todayAttendancePercentage: 0,
+  atRiskCount: 0,
+}
+
 export function Dashboard() {
   const { isAdmin, isTeacher } = useAuth()
-  const [data, setData] = useState<DashboardAnalyticsDto>()
+  const [data, setData] = useState<DashboardAnalyticsDto | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -31,10 +38,11 @@ export function Dashboard() {
     setLoading(true)
     setError('')
     try {
-      setData(await getDashboardAnalytics())
+      const analytics = await getDashboardAnalytics()
+      setData(analytics ?? null)
     } catch (e) {
       setError(errorMessage(e, 'Dashboard analytics could not be loaded.'))
-      setData(undefined)
+      setData(null)
     } finally {
       setLoading(false)
     }
@@ -44,7 +52,17 @@ export function Dashboard() {
     void load()
   }, [load])
 
-  const metrics = data?.metrics
+  const metrics = {
+    totalStudents: data?.metrics?.totalStudents ?? emptyMetrics.totalStudents,
+    activeClasses: data?.metrics?.activeClasses ?? emptyMetrics.activeClasses,
+    todayAttendancePercentage:
+      data?.metrics?.todayAttendancePercentage ?? emptyMetrics.todayAttendancePercentage,
+    atRiskCount: data?.metrics?.atRiskCount ?? emptyMetrics.atRiskCount,
+  }
+  const dailyTrend = data?.dailyTrend ?? []
+  const courseBreakdown = data?.courseBreakdown ?? []
+  const atRiskStudents = data?.atRiskStudents ?? []
+  const myClassesToday = data?.myClassesToday ?? []
 
   return (
     <section className="space-y-8">
@@ -59,14 +77,24 @@ export function Dashboard() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      {loading || !data || !metrics ? (
+      {loading ? (
         <div className="space-y-6">
           <LoadingState label="Loading dashboard analytics..." />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="glass h-32 animate-pulse rounded-2xl bg-slate-950/40" />
+            ))}
+          </div>
           <div className="grid gap-6 xl:grid-cols-2">
             <ChartSkeleton />
             <ChartSkeleton />
           </div>
         </div>
+      ) : !data && !error ? (
+        <EmptyBanner
+          title="No dashboard data yet"
+          description="Analytics will appear once attendance records are available."
+        />
       ) : (
         <>
           <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -100,34 +128,34 @@ export function Dashboard() {
             />
           </div>
 
-          {isTeacher && data.myClassesToday && data.myClassesToday.length > 0 && (
+          {isTeacher && myClassesToday.length > 0 && (
             <article className="glass rounded-2xl p-4 shadow-xl sm:p-6">
               <p className="text-xs font-semibold tracking-[0.14em] text-indigo-300">MY CLASSES TODAY</p>
               <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">
                 Roll-call completion gauges
               </h2>
               <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {data.myClassesToday.map((course) => (
+                {myClassesToday.map((course) => (
                   <Link
-                    key={course.classId}
+                    key={course?.classId ?? course?.code}
                     to="/attendance"
                     className="rounded-2xl border border-white/10 bg-slate-950/35 p-4 transition hover:-translate-y-0.5 hover:border-indigo-400/30 hover:shadow-lg"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-white">{course.className}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{course.code}</p>
+                        <p className="truncate font-semibold text-white">{course?.className ?? 'Class'}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{course?.code}</p>
                       </div>
-                      <span className="text-lg font-bold text-indigo-200">{course.percentage}%</span>
+                      <span className="text-lg font-bold text-indigo-200">{course?.percentage ?? 0}%</span>
                     </div>
                     <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-500"
-                        style={{ width: `${Math.min(100, course.percentage)}%` }}
+                        style={{ width: `${Math.min(100, course?.percentage ?? 0)}%` }}
                       />
                     </div>
                     <p className="mt-2 text-xs text-slate-400">
-                      {course.markedCount}/{course.studentCount} marked
+                      {course?.markedCount ?? 0}/{course?.studentCount ?? 0} marked
                     </p>
                   </Link>
                 ))}
@@ -137,12 +165,12 @@ export function Dashboard() {
 
           <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
             <DailyTrendChart
-              data={data.dailyTrend}
+              data={dailyTrend}
               title={isAdmin ? '30-day daily attendance trend' : 'Your recent attendance trend'}
               subtitle={isAdmin ? 'Institution-wide presence rate' : 'Across your assigned courses'}
             />
             <CourseBreakdownChart
-              data={data.courseBreakdown}
+              data={courseBreakdown}
               title={isAdmin ? 'Departmental breakdown' : 'Weekly course comparison'}
               subtitle={isAdmin ? 'Average attendance by course' : 'This week vs your classes'}
             />
@@ -158,29 +186,29 @@ export function Dashboard() {
                   </h2>
                 </div>
                 <span className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200">
-                  {data.atRiskStudents.length} flagged
+                  {atRiskStudents.length} flagged
                 </span>
               </div>
 
-              {data.atRiskStudents.length === 0 ? (
+              {atRiskStudents.length === 0 ? (
                 <p className="mt-8 inline-flex items-center gap-2 text-sm text-emerald-300">
                   <CheckCircle2 size={17} />
                   No students currently below the threshold.
                 </p>
               ) : (
                 <div className="mt-5 space-y-2">
-                  {data.atRiskStudents.slice(0, 8).map((student) => (
+                  {atRiskStudents.slice(0, 8).map((student) => (
                     <div
-                      key={student.studentId}
+                      key={student?.studentId ?? student?.enrollmentNumber}
                       className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-slate-950/30 px-3 py-3 transition hover:border-rose-400/20"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-white">{student.studentName}</p>
+                        <p className="truncate font-medium text-white">{student?.studentName ?? 'Student'}</p>
                         <p className="truncate text-xs text-slate-500">
-                          {student.className} · {student.enrollmentNumber}
+                          {student?.className} · {student?.enrollmentNumber}
                         </p>
                       </div>
-                      <AttendanceBadge percentage={student.percentage} />
+                      <AttendanceBadge percentage={student?.percentage ?? 0} />
                     </div>
                   ))}
                 </div>
@@ -228,6 +256,18 @@ export function Dashboard() {
         </>
       )}
     </section>
+  )
+}
+
+function EmptyBanner({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="glass rounded-2xl border border-dashed border-white/15 p-10 text-center shadow-xl">
+      <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/20">
+        <CalendarCheck size={22} />
+      </div>
+      <p className="font-semibold text-white">{title}</p>
+      <p className="mt-1 text-sm text-slate-400">{description}</p>
+    </div>
   )
 }
 

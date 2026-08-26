@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react'
+import { BarChart3, Download } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import {
@@ -13,20 +13,18 @@ import { useAuth } from '../context/AuthContext'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
 import apiClient, { getReportsAnalytics } from '../services/api'
 import type { ClassDto, ReportsAnalyticsDto } from '../types'
+import { daysAgoLocal, toLocalDateString } from '../utils/date'
 
-function daysAgoIso(days: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString().slice(0, 10)
-}
+const dateInputClass =
+  'w-full max-w-xs rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30'
 
 export function Reports() {
   const { isAdmin, isTeacher } = useAuth()
   const [classes, setClasses] = useState<ClassDto[]>([])
   const [classId, setClassId] = useState('')
-  const [startDate, setStartDate] = useState(() => daysAgoIso(60))
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [report, setReport] = useState<ReportsAnalyticsDto>()
+  const [startDate, setStartDate] = useState(() => daysAgoLocal(60))
+  const [endDate, setEndDate] = useState(() => toLocalDateString())
+  const [report, setReport] = useState<ReportsAnalyticsDto | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const { classes: visibleClasses, label: classLabel, isScopedToAssignments } = useVisibleClasses(classes)
@@ -36,12 +34,12 @@ export function Reports() {
     setError('')
     try {
       const classResult = await apiClient.get<ClassDto[]>('/classes')
-      setClasses(classResult.data)
+      setClasses(classResult.data ?? [])
       const analytics = await getReportsAnalytics(startDate, endDate, classId || undefined)
-      setReport(analytics)
+      setReport(analytics ?? null)
     } catch (e) {
       setError(errorMessage(e, 'Reports analytics could not be loaded.'))
-      setReport(undefined)
+      setReport(null)
     } finally {
       setLoading(false)
     }
@@ -51,24 +49,43 @@ export function Reports() {
     void load()
   }, [load])
 
+  const kpis = {
+    totalEvents: report?.kpis?.totalEvents ?? 0,
+    activeLearners: report?.kpis?.activeLearners ?? 0,
+    systemAveragePercentage: report?.kpis?.systemAveragePercentage ?? 0,
+    atRiskCount: report?.kpis?.atRiskCount ?? 0,
+  }
+  const statusDistribution = report?.statusDistribution ?? []
+  const coursePerformance = report?.coursePerformance ?? []
+  const courseRadar = report?.courseRadar ?? []
+  const classBreakdown = report?.classBreakdown ?? []
+  const studentHistories = report?.studentHistories ?? []
+
+  const isEmptyReport =
+    !!report &&
+    statusDistribution.length === 0 &&
+    coursePerformance.length === 0 &&
+    classBreakdown.length === 0 &&
+    kpis.totalEvents === 0
+
   const exportCsv = () => {
     if (!report) return
     const rows = [
       ['Class', 'Student', 'Enrollment', 'Present', 'Late', 'Absent', 'Excused', 'Percentage'],
-      ...report.classBreakdown.flatMap((course) =>
-        course.students.map((s) => [
-          course.className,
-          s.studentName,
-          s.enrollmentNumber,
-          String(s.present),
-          String(s.late),
-          String(s.absent),
-          String(s.excused),
-          String(s.percentage),
+      ...classBreakdown.flatMap((course) =>
+        (course?.students ?? []).map((s) => [
+          course?.className ?? '',
+          s?.studentName ?? '',
+          s?.enrollmentNumber ?? '',
+          String(s?.present ?? 0),
+          String(s?.late ?? 0),
+          String(s?.absent ?? 0),
+          String(s?.excused ?? 0),
+          String(s?.percentage ?? 0),
         ]),
       ),
     ]
-    const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(',')).join('\n')
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -78,10 +95,7 @@ export function Reports() {
     URL.revokeObjectURL(url)
   }
 
-  const timelineStudents = useMemo(
-    () => report?.studentHistories?.slice(0, 6) ?? [],
-    [report?.studentHistories],
-  )
+  const timelineStudents = useMemo(() => studentHistories.slice(0, 6), [studentHistories])
 
   return (
     <section className="space-y-6">
@@ -94,7 +108,7 @@ export function Reports() {
         }
         action={
           isAdmin ? (
-            <button type="button" className="btn-primary" onClick={exportCsv} disabled={!report}>
+            <button type="button" className="btn-primary" onClick={exportCsv} disabled={!report || isEmptyReport}>
               <Download size={18} />
               Export CSV
             </button>
@@ -108,7 +122,7 @@ export function Reports() {
         <label className="block text-xs font-medium text-slate-400">
           Start date
           <input
-            className="field mt-1.5 px-4 py-2.5"
+            className={`${dateInputClass} mt-1.5`}
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
@@ -117,16 +131,16 @@ export function Reports() {
         <label className="block text-xs font-medium text-slate-400">
           End date
           <input
-            className="field mt-1.5 px-4 py-2.5"
+            className={`${dateInputClass} mt-1.5`}
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
         </label>
-        <label className="block text-xs font-medium text-slate-400 sm:col-span-2 lg:col-span-2">
+        <label className="block text-xs font-medium text-slate-400 sm:col-span-2">
           {isScopedToAssignments ? classLabel : 'Class filter'}
           <select
-            className="field mt-1.5 px-4 py-2.5"
+            className="field mt-1.5 max-w-md px-3 py-1.5 text-sm"
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
             aria-label={classLabel}
@@ -141,36 +155,40 @@ export function Reports() {
         </label>
       </div>
 
-      {loading || !report ? (
+      {loading ? (
         <div className="space-y-6">
-          {loading && <LoadingState label="Loading reports analytics..." />}
+          <LoadingState label="Loading reports analytics..." />
           <div className="grid gap-6 xl:grid-cols-2">
             <ChartSkeleton />
             <ChartSkeleton />
           </div>
         </div>
+      ) : !report && !error ? (
+        <EmptyReportsBanner />
+      ) : !report ? null : isEmptyReport ? (
+        <EmptyReportsBanner />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="Total events" value={report.kpis.totalEvents} />
-            <Kpi label="Active learners" value={report.kpis.activeLearners} />
+            <Kpi label="Total events" value={kpis.totalEvents} />
+            <Kpi label="Active learners" value={kpis.activeLearners} />
             <Kpi
               label={isTeacher ? 'Class average' : 'System average'}
-              value={`${report.kpis.systemAveragePercentage}%`}
+              value={`${kpis.systemAveragePercentage}%`}
             />
-            <Kpi label="At-risk count" value={report.kpis.atRiskCount} tone="text-rose-300" />
+            <Kpi label="At-risk count" value={kpis.atRiskCount} tone="text-rose-300" />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
             {isAdmin ? (
               <>
                 <StatusDonutChart
-                  data={report.statusDistribution}
+                  data={statusDistribution}
                   title="60-day status distribution"
-                  subtitle={`${report.startDate} → ${report.endDate}`}
+                  subtitle={`${report?.startDate ?? startDate} → ${report?.endDate ?? endDate}`}
                 />
                 <CourseHeatBarChart
-                  data={report.coursePerformance}
+                  data={coursePerformance}
                   title="Course attendance heatmap"
                   subtitle="Average % by course"
                 />
@@ -178,12 +196,12 @@ export function Reports() {
             ) : (
               <>
                 <CourseRadarChart
-                  data={report.courseRadar?.length ? report.courseRadar : report.coursePerformance}
+                  data={courseRadar.length ? courseRadar : coursePerformance}
                   title="Course performance breakdown"
                   subtitle="Present / Late / Absent / Excused rates"
                 />
                 <StatusDonutChart
-                  data={report.statusDistribution}
+                  data={statusDistribution}
                   title="Your status mix"
                   subtitle="Scoped to assigned classes"
                 />
@@ -198,23 +216,23 @@ export function Reports() {
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
                 {timelineStudents.map((student) => (
                   <div
-                    key={student.studentId}
+                    key={student?.studentId ?? student?.enrollmentNumber}
                     className="rounded-2xl border border-white/10 bg-slate-950/35 p-4"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-white">{student.studentName}</p>
-                        <p className="text-xs text-slate-500">{student.enrollmentNumber}</p>
+                        <p className="truncate font-semibold text-white">{student?.studentName ?? 'Student'}</p>
+                        <p className="text-xs text-slate-500">{student?.enrollmentNumber}</p>
                       </div>
-                      <AttendanceBadge percentage={student.percentage} />
+                      <AttendanceBadge percentage={student?.percentage ?? 0} />
                     </div>
                     <ol className="mt-4 space-y-2 border-l border-white/10 pl-4">
-                      {student.timeline.slice(0, 5).map((point, index) => (
-                        <li key={`${point.date}-${index}`} className="relative text-xs text-slate-400">
+                      {(student?.timeline ?? []).slice(0, 5).map((point, index) => (
+                        <li key={`${point?.date}-${index}`} className="relative text-xs text-slate-400">
                           <span className="absolute -left-[1.3rem] top-1 h-2 w-2 rounded-full bg-indigo-400" />
-                          <span className="font-medium text-slate-200">{point.date}</span>
+                          <span className="font-medium text-slate-200">{point?.date}</span>
                           {' · '}
-                          {point.status} · {point.className}
+                          {point?.status} · {point?.className}
                         </li>
                       ))}
                     </ol>
@@ -228,55 +246,79 @@ export function Reports() {
             <h2 className="text-lg font-semibold tracking-tight text-white">
               {isTeacher ? 'Class attendance breakdown' : 'Course detail tables'}
             </h2>
-            {report.classBreakdown.map((course) => (
-              <article key={course.classId} className="glass overflow-hidden rounded-2xl shadow-xl">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">
-                  <div>
-                    <p className="font-semibold text-white">
-                      {course.className}{' '}
-                      <span className="text-sm font-normal text-slate-500">({course.code})</span>
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      P {course.present} · L {course.late} · A {course.absent} · E {course.excused}
-                    </p>
+            {classBreakdown.length === 0 ? (
+              <EmptyReportsBanner compact />
+            ) : (
+              classBreakdown.map((course) => (
+                <article key={course?.classId ?? course?.code} className="glass overflow-hidden rounded-2xl shadow-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">
+                    <div>
+                      <p className="font-semibold text-white">
+                        {course?.className ?? 'Class'}{' '}
+                        <span className="text-sm font-normal text-slate-500">({course?.code})</span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        P {course?.present ?? 0} · L {course?.late ?? 0} · A {course?.absent ?? 0} · E{' '}
+                        {course?.excused ?? 0}
+                      </p>
+                    </div>
+                    <AttendanceBadge percentage={course?.percentage ?? 0} />
                   </div>
-                  <AttendanceBadge percentage={course.percentage} />
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-left text-sm">
-                    <thead className="bg-slate-950/40 text-xs uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold sm:px-5">Student</th>
-                        <th className="px-3 py-3 font-semibold">Enrollment</th>
-                        <th className="px-3 py-3 font-semibold">P / L / A / E</th>
-                        <th className="px-4 py-3 font-semibold sm:px-5">%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {course.students.map((s) => (
-                        <tr
-                          key={s.studentId}
-                          className="border-t border-white/5 text-slate-300 hover:bg-white/[0.03]"
-                        >
-                          <td className="px-4 py-3 font-medium text-white sm:px-5">{s.studentName}</td>
-                          <td className="px-3 py-3">{s.enrollmentNumber}</td>
-                          <td className="px-3 py-3 text-xs">
-                            {s.present} / {s.late} / {s.absent} / {s.excused}
-                          </td>
-                          <td className="px-4 py-3 sm:px-5">
-                            <AttendanceBadge percentage={s.percentage} />
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px] text-left text-sm">
+                      <thead className="bg-slate-950/40 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold sm:px-5">Student</th>
+                          <th className="px-3 py-3 font-semibold">Enrollment</th>
+                          <th className="px-3 py-3 font-semibold">P / L / A / E</th>
+                          <th className="px-4 py-3 font-semibold sm:px-5">%</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </article>
-            ))}
+                      </thead>
+                      <tbody>
+                        {(course?.students ?? []).map((s) => (
+                          <tr
+                            key={s?.studentId ?? s?.enrollmentNumber}
+                            className="border-t border-white/5 text-slate-300 hover:bg-white/[0.03]"
+                          >
+                            <td className="px-4 py-3 font-medium text-white sm:px-5">{s?.studentName}</td>
+                            <td className="px-3 py-3">{s?.enrollmentNumber}</td>
+                            <td className="px-3 py-3 text-xs">
+                              {s?.present ?? 0} / {s?.late ?? 0} / {s?.absent ?? 0} / {s?.excused ?? 0}
+                            </td>
+                            <td className="px-4 py-3 sm:px-5">
+                              <AttendanceBadge percentage={s?.percentage ?? 0} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </>
       )}
     </section>
+  )
+}
+
+function EmptyReportsBanner({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={`glass rounded-2xl border border-dashed border-white/15 text-center shadow-xl ${
+        compact ? 'p-8' : 'p-10'
+      }`}
+    >
+      <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/20">
+        <BarChart3 size={22} />
+      </div>
+      <p className="font-semibold text-white">No report data for this range</p>
+      <p className="mt-1 text-sm text-slate-400">
+        Try widening the date range or selecting another class. Charts and tables will populate once attendance
+        events exist.
+      </p>
+    </div>
   )
 }
 

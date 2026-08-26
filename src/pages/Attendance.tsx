@@ -5,7 +5,8 @@ import { PageHeader } from '../components/common/PageHeader'
 import { useAuth } from '../context/AuthContext'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
 import apiClient, { markAttendance } from '../services/api'
-import type { AttendanceRecordDto, AttendanceStatus, ClassDto } from '../types'
+import type { AttendanceRecordDto, AttendanceStatus, ClassDto, MarkAttendanceRequestDto } from '../types'
+import { looksLikeGuid, toLocalDateString } from '../utils/date'
 
 const statuses: AttendanceStatus[] = ['Present', 'Late', 'Absent', 'Excused']
 
@@ -65,7 +66,7 @@ export function Attendance() {
   const { user, isTeacher } = useAuth()
   const [classes, setClasses] = useState<ClassDto[]>([])
   const [classId, setClassId] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => toLocalDateString())
   const [records, setRecords] = useState<AttendanceRecordDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -119,6 +120,22 @@ export function Attendance() {
     return () => window.clearTimeout(timer)
   }, [saveState])
 
+  const submitMark = async (payload: MarkAttendanceRequestDto) => {
+    console.log('[attendance/mark] records payload', {
+      classId: payload.classId,
+      date: payload.date,
+      records: payload.records,
+    })
+    const invalid = payload.records.filter((row) => !looksLikeGuid(row.studentId))
+    if (invalid.length > 0) {
+      console.warn(
+        '[attendance/mark] studentId should be a Guid primary key, not an enrollment number',
+        invalid,
+      )
+    }
+    await markAttendance(payload)
+  }
+
   const mark = async (record: AttendanceRecordDto, status: AttendanceStatus) => {
     if (record.status === status) return
     setSaveState('saving')
@@ -127,7 +144,7 @@ export function Attendance() {
       current.map((r) => (r.studentId === record.studentId ? { ...r, status } : r)),
     )
     try {
-      await markAttendance({
+      await submitMark({
         classId,
         date,
         records: [{ studentId: record.studentId, status }],
@@ -149,7 +166,7 @@ export function Attendance() {
     setError('')
     setRecords((current) => current.map((record) => ({ ...record, status: 'Present' as const })))
     try {
-      await markAttendance({
+      await submitMark({
         classId,
         date,
         records: records.map((record) => ({
@@ -190,15 +207,15 @@ export function Attendance() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      <div className="glass grid gap-3 rounded-2xl p-4 shadow-xl sm:grid-cols-2 sm:p-5">
-        <div>
+      <div className="glass grid gap-3 rounded-2xl p-4 shadow-xl sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-5">
+        <div className="min-w-0">
           {isScopedToAssignments && (
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-indigo-300">
               {classLabel}
             </p>
           )}
           <select
-            className="field px-4 py-2.5"
+            className="field max-w-md px-3 py-1.5 text-sm"
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
             aria-label={classLabel}
@@ -210,12 +227,15 @@ export function Attendance() {
             ))}
           </select>
         </div>
-        <input
-          className="field px-4 py-2.5"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <label className="block text-xs font-medium text-slate-400">
+          Date
+          <input
+            className="mt-1.5 w-44 max-w-xs rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </label>
       </div>
 
       {loading ? (

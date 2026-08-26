@@ -84,18 +84,19 @@ export function DailyTrendChart({
   title = 'Daily attendance trend',
   subtitle = 'Last 30 days',
 }: {
-  data: DailyAttendancePointDto[]
+  data?: DailyAttendancePointDto[] | null
   title?: string
   subtitle?: string
 }) {
+  const series = data ?? []
   return (
     <ChartCard eyebrow="TREND" title={title} subtitle={subtitle}>
       <div className="h-56 w-full min-w-0 sm:h-64">
-        {data.length === 0 ? (
+        {series.length === 0 ? (
           <EmptyChart />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+            <AreaChart data={series} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
               <defs>
                 <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#6366f1" stopOpacity={0.45} />
@@ -144,24 +145,25 @@ export function CourseBreakdownChart({
   title = 'Course breakdown',
   subtitle,
 }: {
-  data: NamedMetricDto[]
+  data?: NamedMetricDto[] | null
   title?: string
   subtitle?: string
 }) {
+  const series = data ?? []
   return (
     <ChartCard eyebrow="COMPARISON" title={title} subtitle={subtitle}>
       <div className="h-56 w-full min-w-0 sm:h-64">
-        {data.length === 0 ? (
+        {series.length === 0 ? (
           <EmptyChart />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 4 }}>
+            <BarChart data={series} margin={{ top: 8, right: 8, left: -12, bottom: 4 }}>
               <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
               <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
               <YAxis domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${v}%`} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`${value}%`, 'Attendance']} />
               <Bar dataKey="value" radius={[8, 8, 4, 4]} maxBarSize={42}>
-                {data.map((_, i) => (
+                {series.map((_, i) => (
                   <Cell key={i} fill={CHART_PALETTE[i % CHART_PALETTE.length]} />
                 ))}
               </Bar>
@@ -178,11 +180,12 @@ export function StatusDonutChart({
   title = 'Status distribution',
   subtitle,
 }: {
-  data: NamedMetricDto[]
+  data?: NamedMetricDto[] | null
   title?: string
   subtitle?: string
 }) {
-  const total = data.reduce((sum, d) => sum + d.value, 0)
+  const series = data ?? []
+  const total = series.reduce((sum, d) => sum + (d?.value ?? 0), 0)
   return (
     <ChartCard eyebrow="DISTRIBUTION" title={title} subtitle={subtitle}>
       <div className="h-56 w-full min-w-0 sm:h-64">
@@ -192,7 +195,7 @@ export function StatusDonutChart({
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={data}
+                data={series}
                 dataKey="value"
                 nameKey="name"
                 innerRadius="58%"
@@ -201,8 +204,8 @@ export function StatusDonutChart({
                 stroke="rgba(15,23,42,0.8)"
                 strokeWidth={2}
               >
-                {data.map((entry) => (
-                  <Cell key={entry.id || entry.name} fill={STATUS_COLORS[entry.name] ?? CHART_PALETTE[0]} />
+                {series.map((entry) => (
+                  <Cell key={entry?.id || entry?.name} fill={STATUS_COLORS[entry?.name ?? ''] ?? CHART_PALETTE[0]} />
                 ))}
               </Pie>
               <Tooltip contentStyle={tooltipStyle} />
@@ -224,18 +227,19 @@ export function CourseRadarChart({
   title = 'Course performance',
   subtitle,
 }: {
-  data: NamedMetricDto[]
+  data?: NamedMetricDto[] | null
   title?: string
   subtitle?: string
 }) {
+  const series = data ?? []
   return (
     <ChartCard eyebrow="PERFORMANCE" title={title} subtitle={subtitle}>
       <div className="h-56 w-full min-w-0 sm:h-64">
-        {data.length === 0 ? (
+        {series.length === 0 ? (
           <EmptyChart />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
+            <RadarChart data={series} cx="50%" cy="50%" outerRadius="70%">
               <PolarGrid stroke="rgba(148,163,184,0.2)" />
               <PolarAngleAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} />
               <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 10 }} />
@@ -254,27 +258,28 @@ export function CourseHeatBarChart({
   title = 'Course attendance heatmap',
   subtitle,
 }: {
-  data: NamedMetricDto[]
+  data?: NamedMetricDto[] | null
   title?: string
   subtitle?: string
 }) {
+  const series = data ?? []
   return (
     <ChartCard eyebrow="HEATMAP" title={title} subtitle={subtitle}>
       <div className="h-56 w-full min-w-0 sm:h-64">
-        {data.length === 0 ? (
+        {series.length === 0 ? (
           <EmptyChart />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart layout="vertical" data={data} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+            <BarChart layout="vertical" data={series} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
               <CartesianGrid stroke="rgba(148,163,184,0.12)" horizontal={false} />
               <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" width={88} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`${value}%`, 'Attendance']} />
               <Bar dataKey="value" radius={[0, 8, 8, 0]} maxBarSize={18}>
-                {data.map((entry, i) => (
+                {series.map((entry, i) => (
                   <Cell
-                    key={entry.id || i}
-                    fill={entry.value < 75 ? '#fb7185' : entry.value < 85 ? '#fbbf24' : '#34d399'}
+                    key={entry?.id || i}
+                    fill={(entry?.value ?? 0) < 75 ? '#fb7185' : (entry?.value ?? 0) < 85 ? '#fbbf24' : '#34d399'}
                   />
                 ))}
               </Bar>

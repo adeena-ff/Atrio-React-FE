@@ -12,7 +12,7 @@ export interface ListQueryParams {
   search?: string
   classId?: string
   status?: string
-  department?: string
+  academicYear?: string
   pageNumber?: number
   pageSize?: number
 }
@@ -53,21 +53,34 @@ export function paginateLocally<T>(
   }
 }
 
+/**
+ * Extract row items from either a bare array or a paged API envelope.
+ * Backend list endpoints return `{ items, pageNumber, ... }` — never assume an array.
+ */
+export function unwrapListItems<T>(data: PagedResultDto<T> | T[] | null | undefined): T[] {
+  if (!data) return []
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data.items)) return data.items
+  return []
+}
+
 /** Accept either a paged envelope or a raw array from the API. */
 export function normalizePagedResult<T>(
-  data: PagedResultDto<T> | T[],
+  data: PagedResultDto<T> | T[] | null | undefined,
   pageNumber: number,
   pageSize: number,
 ): PagedResultDto<T> {
+  if (!data) return emptyPage(pageNumber, pageSize)
   if (Array.isArray(data)) {
     return paginateLocally(data, pageNumber, pageSize)
   }
 
+  const items = unwrapListItems(data)
   return {
-    items: data.items ?? [],
+    items,
     pageNumber: data.pageNumber ?? pageNumber,
     pageSize: data.pageSize ?? pageSize,
-    totalCount: data.totalCount ?? data.items?.length ?? 0,
+    totalCount: data.totalCount ?? items.length,
     totalPages:
       data.totalPages ??
       (data.totalCount ? Math.ceil(data.totalCount / (data.pageSize || pageSize)) : 0),

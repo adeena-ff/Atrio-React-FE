@@ -1,4 +1,4 @@
-import { BookOpen, Plus, Users, X } from 'lucide-react'
+import { BookOpen, CalendarRange, Plus, ShieldCheck, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { ErrorBanner, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
@@ -6,8 +6,7 @@ import { PaginationBar, TableControls, TableSkeleton } from '../components/commo
 import { useAuth } from '../context/AuthContext'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
-import { getClassesPage } from '../services/api'
-import apiClient from '../services/api'
+import apiClient, { getClassOptions, getClassesPage } from '../services/api'
 import type { ClassDto, CreateClassDto, PagedResultDto } from '../types'
 import { emptyPage } from '../utils/pagination'
 
@@ -22,7 +21,7 @@ export function Classes() {
   const [page, setPage] = useState<PagedResultDto<ClassDto>>(emptyPage())
   const [yearOptions, setYearOptions] = useState<string[]>([])
   const [search, setSearch] = useState('')
-  const [department, setDepartment] = useState('')
+  const [academicYear, setAcademicYear] = useState('')
   const [status, setStatus] = useState('')
   const [pageNumber, setPageNumber] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -38,31 +37,25 @@ export function Classes() {
     setLoading(true)
     setError('')
     try {
-      const result = await getClassesPage({
-        search: debouncedSearch,
-        department: department || undefined,
-        status: status || undefined,
-        pageNumber,
-        pageSize,
-      })
+      const [result, allClasses] = await Promise.all([
+        getClassesPage({
+          search: debouncedSearch,
+          academicYear: academicYear || undefined,
+          status: status || undefined,
+          pageNumber,
+          pageSize,
+        }),
+        getClassOptions(),
+      ])
       setPage(result)
-      const years = Array.from(
-        new Set(
-          (
-            await apiClient.get<ClassDto[] | PagedResultDto<ClassDto>>('/classes').then((r) =>
-              Array.isArray(r.data) ? r.data : (r.data.items ?? []),
-            )
-          ).map((c) => c.academicYear),
-        ),
-      ).sort()
-      setYearOptions(years)
+      setYearOptions(Array.from(new Set(allClasses.map((c) => c.academicYear).filter(Boolean))).sort())
     } catch (e) {
       setError(errorMessage(e, 'Classes could not be loaded.'))
       setPage(emptyPage(pageNumber, pageSize))
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, department, pageNumber, pageSize, status])
+  }, [academicYear, debouncedSearch, pageNumber, pageSize, status])
 
   useEffect(() => {
     void load()
@@ -70,10 +63,10 @@ export function Classes() {
 
   useEffect(() => {
     setPageNumber(1)
-  }, [debouncedSearch, department, status])
+  }, [academicYear, debouncedSearch, status])
 
-  const departmentFilters = useMemo(
-    () => yearOptions.map((year) => ({ value: year, label: `Year ${year}` })),
+  const yearFilters = useMemo(
+    () => yearOptions.map((year) => ({ value: year, label: year })),
     [yearOptions],
   )
 
@@ -102,7 +95,11 @@ export function Classes() {
         }
         action={
           isAdmin ? (
-            <button type="button" className="btn-primary cursor-pointer transition-all duration-200 active:scale-95" onClick={() => setShowModal(true)}>
+            <button
+              type="button"
+              className="btn-primary cursor-pointer transition-all duration-200 active:scale-95"
+              onClick={() => setShowModal(true)}
+            >
               <Plus size={18} />
               Create class
             </button>
@@ -121,14 +118,20 @@ export function Classes() {
           search={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search by class name or code..."
+          onClearFilters={() => {
+            setSearch('')
+            setAcademicYear('')
+            setStatus('')
+          }}
           filters={[
             {
-              id: 'department',
+              id: 'academicYear',
               label: 'Academic year',
-              value: department,
-              onChange: setDepartment,
+              value: academicYear,
+              onChange: setAcademicYear,
               allLabel: 'All years',
-              options: departmentFilters,
+              icon: CalendarRange,
+              options: yearFilters,
             },
             {
               id: 'status',
@@ -136,6 +139,7 @@ export function Classes() {
               value: status,
               onChange: setStatus,
               allLabel: 'All statuses',
+              icon: ShieldCheck,
               options: [
                 { value: 'active', label: 'Active' },
                 { value: 'inactive', label: 'Inactive' },
@@ -163,19 +167,15 @@ export function Classes() {
                     <div className="rounded-2xl bg-indigo-500/15 p-3 text-indigo-300 ring-1 ring-indigo-400/20">
                       <BookOpen size={22} />
                     </div>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                    <span className="rounded-full bg-slate-800/80 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-white/10">
                       {course.code}
                     </span>
                   </div>
-
-                  <h2 className="mt-5 text-lg font-semibold tracking-tight text-white">{course.name}</h2>
+                  <h3 className="mt-4 text-lg font-semibold text-white">{course.name}</h3>
                   <p className="mt-1.5 text-sm text-slate-400">Academic year {course.academicYear}</p>
-
-                  <div className="mt-6 flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-slate-300">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-sky-200">
-                      <Users size={14} />
-                      {course.studentCount} students
-                    </span>
+                  <div className="mt-4 flex items-center gap-2 text-sm text-slate-300">
+                    <Users size={16} className="text-slate-500" />
+                    {course.studentCount} students
                   </div>
                 </div>
               </article>
@@ -198,46 +198,47 @@ export function Classes() {
         />
       </div>
 
-      {isAdmin && showModal && (
-        <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <form onSubmit={submit} className="glass relative w-full max-w-lg rounded-2xl p-6 shadow-xl sm:p-7">
-            <button
-              type="button"
-              onClick={() => setShowModal(false)}
-              className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 transition hover:bg-white/5 hover:text-white"
-              aria-label="Close"
-            >
-              <X size={18} />
-            </button>
-            <h2 className="text-xl font-bold tracking-tight text-white">Create a class</h2>
-            <div className="mt-5 grid gap-3">
-              <input
-                required
-                className="field px-4 py-2.5"
-                placeholder="Class name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-              <input
-                required
-                className="field px-4 py-2.5"
-                placeholder="Class code"
-                value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value })}
-              />
-              <input
-                required
-                className="field px-4 py-2.5"
-                placeholder="Academic year"
-                value={form.academicYear}
-                onChange={(e) => setForm({ ...form, academicYear: e.target.value })}
-              />
+      {showModal && isAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <form onSubmit={submit} className="glass w-full max-w-md space-y-4 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white">Create class</h2>
+              <button
+                type="button"
+                className="rounded-lg p-1 text-slate-400 hover:bg-white/5 hover:text-white"
+                onClick={() => setShowModal(false)}
+              >
+                <X size={18} />
+              </button>
             </div>
-            <div className="mt-6 flex justify-end gap-2">
+            <input
+              className="field"
+              placeholder="Class name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+            <input
+              className="field"
+              placeholder="Code (e.g. CSC-101)"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              required
+            />
+            <input
+              className="field"
+              placeholder="Academic year"
+              value={form.academicYear}
+              onChange={(e) => setForm({ ...form, academicYear: e.target.value })}
+              required
+            />
+            <div className="flex justify-end gap-2 pt-2">
               <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                 Cancel
               </button>
-              <button className="btn-primary">Save class</button>
+              <button type="submit" className="btn-primary">
+                Create
+              </button>
             </div>
           </form>
         </div>

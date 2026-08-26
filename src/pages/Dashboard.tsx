@@ -74,7 +74,7 @@ export function Dashboard() {
         description={
           isTeacher
             ? 'Real-time view of your classes today, weekly course comparison, and students needing attention.'
-            : 'Operational metrics, 30-day trends, departmental breakdown, and at-risk cohort alerts.'
+            : 'Operational metrics, 30-day trends, course breakdown, and at-risk cohort alerts.'
         }
       />
 
@@ -174,7 +174,7 @@ export function Dashboard() {
             />
             <CourseBreakdownChart
               data={courseBreakdown}
-              title={isAdmin ? 'Departmental breakdown' : 'Weekly course comparison'}
+              title={isAdmin ? 'Course breakdown' : 'Weekly course comparison'}
               subtitle={isAdmin ? 'Average attendance by course' : 'This week vs your classes'}
             />
           </div>

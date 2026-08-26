@@ -23,6 +23,9 @@ function normalizeUser(raw: UserDto): UserDto {
   return {
     ...raw,
     role: normalizeRole(raw.role),
+    assignedClassIds: Array.isArray(raw.assignedClassIds)
+      ? raw.assignedClassIds.map(String)
+      : [],
   }
 }
 

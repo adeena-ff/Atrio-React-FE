@@ -131,7 +131,7 @@ export interface ListQueryParams {
   search?: string
   classId?: string
   status?: string
-  department?: string
+  academicYear?: string
   pageNumber?: number
   pageSize?: number
 }
@@ -200,7 +200,7 @@ export interface DashboardAnalyticsDto {
   }
   /** Admin: last 30 days institution trend. Teacher: last 7–30 days across assigned courses. */
   dailyTrend: DailyAttendancePointDto[]
-  /** Admin: departmental / course breakdown. Teacher: weekly course comparison. */
+  /** Admin: course breakdown. Teacher: weekly course comparison. */
   courseBreakdown: NamedMetricDto[]
   atRiskStudents: AtRiskStudentDto[]
   /** Teacher-only: per-class roll-call completion gauges for today. */

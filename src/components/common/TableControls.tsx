@@ -1,4 +1,14 @@
-import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  GraduationCap,
+  type LucideIcon,
+  Search,
+  X,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 
 export interface FilterOption {
@@ -13,6 +23,7 @@ export interface TableFilterConfig {
   options: FilterOption[]
   onChange: (value: string) => void
   allLabel?: string
+  icon?: LucideIcon
 }
 
 interface TableControlsProps {
@@ -21,6 +32,7 @@ interface TableControlsProps {
   searchPlaceholder?: string
   filters?: TableFilterConfig[]
   children?: ReactNode
+  onClearFilters?: () => void
 }
 
 interface PaginationBarProps {
@@ -35,7 +47,91 @@ interface PaginationBarProps {
   pageSizeOptions?: number[]
 }
 
+interface IconSelectProps {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: FilterOption[]
+  allLabel?: string
+  icon?: LucideIcon
+  className?: string
+  hideAllOption?: boolean
+}
+
+interface IconDateFieldProps {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  className?: string
+}
+
 const PAGE_SIZES = [10, 25, 50]
+
+export function IconSelect({
+  label,
+  value,
+  onChange,
+  options,
+  allLabel,
+  icon: Icon = Filter,
+  className = '',
+  hideAllOption = false,
+}: IconSelectProps) {
+  const active = Boolean(value)
+
+  return (
+    <label className={`flex min-w-0 flex-col gap-1.5 ${className}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</span>
+      <div className="relative">
+        <Icon
+          className={`pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 ${
+            active ? 'text-indigo-300' : 'text-slate-500'
+          }`}
+          size={16}
+        />
+        <select
+          className={`field field-select field-with-icon field-with-trailing-icon text-sm ${
+            active ? 'border-indigo-400/35 bg-indigo-500/10' : ''
+          }`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
+        >
+          {!hideAllOption && <option value="">{allLabel ?? `All ${label.toLowerCase()}`}</option>}
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
+          size={16}
+        />
+      </div>
+    </label>
+  )
+}
+
+export function IconDateField({ label, value, onChange, className = '' }: IconDateFieldProps) {
+  return (
+    <label className={`flex min-w-0 flex-col gap-1.5 ${className}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</span>
+      <div className="relative max-w-xs">
+        <CalendarDays
+          className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-slate-500"
+          size={16}
+        />
+        <input
+          className="field field-with-icon w-full max-w-xs text-sm"
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+    </label>
+  )
+}
 
 export function TableControls({
   search,
@@ -43,48 +139,75 @@ export function TableControls({
   searchPlaceholder = 'Search…',
   filters = [],
   children,
+  onClearFilters,
 }: TableControlsProps) {
+  const activeFilterCount = filters.filter((filter) => Boolean(filter.value)).length
+  const hasActiveQuery = Boolean(search) || activeFilterCount > 0
+
   return (
-    <div className="flex flex-col gap-3 border-b border-white/10 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:p-5">
-      <div className="relative min-w-0 flex-1">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-        <input
-          className="field field-with-icon pr-10"
-          placeholder={searchPlaceholder}
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          aria-label={searchPlaceholder}
-        />
-        {search && (
+    <div className="space-y-4 border-b border-white/10 bg-gradient-to-br from-slate-950/40 via-transparent to-indigo-500/5 p-4 sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Search</span>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-300/80"
+              size={18}
+            />
+            <input
+              className="field field-with-icon field-with-trailing-icon"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              aria-label={searchPlaceholder}
+            />
+            {search ? (
+              <button
+                type="button"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear search"
+              >
+                <X size={16} />
+              </button>
+            ) : null}
+          </div>
+        </label>
+
+        {children}
+
+        {hasActiveQuery && onClearFilters ? (
           <button
             type="button"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition hover:bg-white/5 hover:text-white"
-            onClick={() => onSearchChange('')}
-            aria-label="Clear search"
+            onClick={onClearFilters}
+            className="btn-secondary h-[42px] shrink-0 cursor-pointer px-3 text-xs transition-all duration-200 active:scale-95 lg:mb-0.5"
           >
-            <X size={16} />
+            <X size={14} />
+            Clear filters
+            {activeFilterCount > 0 ? (
+              <span className="rounded-full bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-bold text-indigo-200">
+                {activeFilterCount + (search ? 1 : 0)}
+              </span>
+            ) : null}
           </button>
-        )}
+        ) : null}
       </div>
 
-      {filters.map((filter) => (
-        <select
-          key={filter.id}
-          className="field w-full px-3 py-2.5 text-sm sm:w-48"
-          value={filter.value}
-          onChange={(e) => filter.onChange(e.target.value)}
-          aria-label={filter.label}
-        >
-          <option value="">{filter.allLabel ?? `All ${filter.label.toLowerCase()}`}</option>
-          {filter.options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+      {filters.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filters.map((filter) => (
+            <IconSelect
+              key={filter.id}
+              label={filter.label}
+              value={filter.value}
+              onChange={filter.onChange}
+              options={filter.options}
+              allLabel={filter.allLabel}
+              icon={filter.icon ?? (filter.id === 'class' ? GraduationCap : Filter)}
+            />
           ))}
-        </select>
-      ))}
-
-      {children}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -115,18 +238,24 @@ export function PaginationBar({
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-xs text-slate-400">
           Rows
-          <select
-            className="rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            aria-label="Rows per page"
-          >
-            {pageSizeOptions.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              className="field field-select field-with-trailing-icon w-auto min-w-16 py-1.5 pl-2.5 text-sm"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              aria-label="Rows per page"
+            >
+              {pageSizeOptions.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"
+              size={14}
+            />
+          </div>
         </label>
 
         <button

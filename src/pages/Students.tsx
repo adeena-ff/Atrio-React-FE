@@ -1,4 +1,4 @@
-import { Plus, X } from 'lucide-react'
+import { Activity, GraduationCap, Plus, X } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ErrorBanner, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
@@ -7,7 +7,7 @@ import { PaginationBar, TableControls, TableSkeleton } from '../components/commo
 import { useAuth } from '../context/AuthContext'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
-import apiClient, { getStudentsPage } from '../services/api'
+import apiClient, { getClassOptions, getStudentsPage } from '../services/api'
 import type { ClassDto, CreateStudentDto, PagedResultDto, StudentDto } from '../types'
 import { emptyPage } from '../utils/pagination'
 
@@ -40,7 +40,7 @@ export function Students() {
     setLoading(true)
     setError('')
     try {
-      const [studentPage, classResult] = await Promise.all([
+      const [studentPage, classList] = await Promise.all([
         getStudentsPage({
           search: debouncedSearch,
           classId: classId || undefined,
@@ -48,10 +48,10 @@ export function Students() {
           pageNumber,
           pageSize,
         }),
-        apiClient.get<ClassDto[]>('/classes'),
+        getClassOptions(),
       ])
       setPage(studentPage)
-      setAllClasses(Array.isArray(classResult.data) ? classResult.data : [])
+      setAllClasses(classList)
     } catch (e) {
       setError(errorMessage(e, 'Students could not be loaded.'))
       setPage(emptyPage(pageNumber, pageSize))
@@ -108,6 +108,11 @@ export function Students() {
           search={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search by name or student ID..."
+          onClearFilters={() => {
+            setSearch('')
+            setClassId('')
+            setStatus('')
+          }}
           filters={[
             {
               id: 'class',
@@ -115,6 +120,7 @@ export function Students() {
               value: classId,
               onChange: setClassId,
               allLabel: isTeacher ? classFilterLabel : 'All classes',
+              icon: GraduationCap,
               options: visibleClasses.map((c) => ({ value: c.id, label: c.name })),
             },
             {
@@ -123,6 +129,7 @@ export function Students() {
               value: status,
               onChange: setStatus,
               allLabel: 'All statuses',
+              icon: Activity,
               options: [
                 { value: 'active', label: 'Active' },
                 { value: 'inactive', label: 'Inactive' },

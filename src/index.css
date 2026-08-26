@@ -75,6 +75,16 @@ select {
   padding-left: 2.75rem;
 }
 
+.field-with-trailing-icon {
+  padding-right: 2.5rem;
+}
+
+.field-select {
+  appearance: none;
+  background-image: none;
+  cursor: pointer;
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;

@@ -1,4 +1,4 @@
-import { BarChart3, Download } from 'lucide-react'
+import { BarChart3, Download, Gauge, GraduationCap } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import {
@@ -10,17 +10,20 @@ import {
 import { notify } from '../components/common/AppToaster'
 import { PageHeader } from '../components/common/PageHeader'
 import { AttendanceBadge } from '../components/common/StatusBadge'
-import { PaginationBar, TableControls, TableSkeleton } from '../components/common/TableControls'
+import {
+  IconDateField,
+  IconSelect,
+  PaginationBar,
+  TableControls,
+  TableSkeleton,
+} from '../components/common/TableControls'
 import { useAuth } from '../context/AuthContext'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
-import apiClient, { getReportsAnalytics } from '../services/api'
+import { getClassOptions, getReportsAnalytics } from '../services/api'
 import type { ClassDto, ReportsAnalyticsDto, StudentMonthlyRowDto } from '../types'
 import { daysAgoLocal, toLocalDateString } from '../utils/date'
 import { paginateLocally } from '../utils/pagination'
-
-const dateInputClass =
-  'w-full max-w-xs rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30'
 
 type ReportStudentRow = StudentMonthlyRowDto & { className: string; classId: string }
 
@@ -44,14 +47,9 @@ export function Reports() {
     setLoading(true)
     setError('')
     try {
-      const classResult = await apiClient.get<ClassDto[]>('/classes')
-      setClasses(classResult.data ?? [])
-      const analytics = await getReportsAnalytics(startDate, endDate, classId || undefined, {
-        search: debouncedSearch,
-        status: status || undefined,
-        pageNumber,
-        pageSize,
-      })
+      const classList = await getClassOptions()
+      setClasses(classList)
+      const analytics = await getReportsAnalytics(startDate, endDate, classId || undefined)
       setReport(analytics ?? null)
     } catch (e) {
       const message = errorMessage(e, 'Reports analytics could not be loaded.')
@@ -61,7 +59,7 @@ export function Reports() {
     } finally {
       setLoading(false)
     }
-  }, [classId, debouncedSearch, endDate, pageNumber, pageSize, startDate, status])
+  }, [classId, endDate, startDate])
 
   useEffect(() => {
     void load()
@@ -172,41 +170,19 @@ export function Reports() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      <div className="glass grid gap-3 rounded-2xl p-4 shadow-xl sm:grid-cols-2 lg:grid-cols-4 sm:p-5">
-        <label className="block text-xs font-medium text-slate-400">
-          Start date
-          <input
-            className={`${dateInputClass} mt-1.5`}
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-        </label>
-        <label className="block text-xs font-medium text-slate-400">
-          End date
-          <input
-            className={`${dateInputClass} mt-1.5`}
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-        </label>
-        <label className="block text-xs font-medium text-slate-400 sm:col-span-2">
-          {isScopedToAssignments ? classLabel : 'Class filter'}
-          <select
-            className="field mt-1.5 max-w-md px-3 py-1.5 text-sm"
-            value={classId}
-            onChange={(e) => setClassId(e.target.value)}
-            aria-label={classLabel}
-          >
-            {!isTeacher && <option value="">All classes</option>}
-            {visibleClasses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="glass grid gap-4 rounded-2xl p-4 shadow-xl sm:grid-cols-2 lg:grid-cols-3 sm:p-5">
+        <IconDateField label="Start date" value={startDate} onChange={setStartDate} />
+        <IconDateField label="End date" value={endDate} onChange={setEndDate} />
+        <IconSelect
+          label={isScopedToAssignments ? classLabel : 'Class filter'}
+          value={classId}
+          onChange={setClassId}
+          icon={GraduationCap}
+          hideAllOption={isTeacher}
+          allLabel="All classes"
+          options={visibleClasses.map((c) => ({ value: c.id, label: c.name }))}
+          className="sm:col-span-2 lg:col-span-1"
+        />
       </div>
 
       {loading ? (
@@ -308,6 +284,10 @@ export function Reports() {
               search={search}
               onSearchChange={setSearch}
               searchPlaceholder="Search by student name or ID..."
+              onClearFilters={() => {
+                setSearch('')
+                setStatus('')
+              }}
               filters={[
                 {
                   id: 'status',
@@ -315,6 +295,7 @@ export function Reports() {
                   value: status,
                   onChange: setStatus,
                   allLabel: 'All bands',
+                  icon: Gauge,
                   options: [
                     { value: 'healthy', label: 'Healthy (≥85%)' },
                     { value: 'watch', label: 'Watch (75–84%)' },

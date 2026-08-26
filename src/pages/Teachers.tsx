@@ -1,11 +1,10 @@
-import { Pencil, Plus, UserMinus, UsersRound, X } from 'lucide-react'
+import { Activity, GraduationCap, Pencil, Plus, UserMinus, UsersRound, X } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ErrorBanner, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
 import { PaginationBar, TableControls, TableSkeleton } from '../components/common/TableControls'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import { createTeacher, deactivateTeacher, getTeachers, updateTeacher } from '../services/api'
-import apiClient from '../services/api'
+import { createTeacher, deactivateTeacher, getClassOptions, getTeachers, updateTeacher } from '../services/api'
 import type { ClassDto, CreateTeacherDto, PagedResultDto, TeacherDto, UpdateTeacherDto } from '../types'
 import { emptyPage } from '../utils/pagination'
 
@@ -45,7 +44,7 @@ export function Teachers() {
           pageNumber,
           pageSize,
         }),
-        apiClient.get<ClassDto[]>('/classes').then((r) => (Array.isArray(r.data) ? r.data : [])),
+        getClassOptions(),
       ])
       setPage(teacherPage)
       setClasses(classList)
@@ -149,13 +148,19 @@ export function Teachers() {
           search={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search by name or email..."
+          onClearFilters={() => {
+            setSearch('')
+            setClassId('')
+            setStatus('')
+          }}
           filters={[
             {
               id: 'class',
-              label: 'Class',
+              label: 'Assigned class',
               value: classId,
               onChange: setClassId,
               allLabel: 'All classes',
+              icon: GraduationCap,
               options: classes.map((c) => ({ value: c.id, label: c.name })),
             },
             {
@@ -164,6 +169,7 @@ export function Teachers() {
               value: status,
               onChange: setStatus,
               allLabel: 'All statuses',
+              icon: Activity,
               options: [
                 { value: 'active', label: 'Active' },
                 { value: 'inactive', label: 'Inactive' },

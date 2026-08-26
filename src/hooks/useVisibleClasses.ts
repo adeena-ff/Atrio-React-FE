@@ -6,13 +6,14 @@ import { useAuth } from '../context/AuthContext'
  * Teachers with `assignedClassIds` only see those courses; otherwise the full list is returned
  * (backend may already scope `/classes` for teachers).
  */
-export function useVisibleClasses(classes: ClassDto[]) {
+export function useVisibleClasses(classes: ClassDto[] | null | undefined) {
   const { isTeacher, user } = useAuth()
+  const list = Array.isArray(classes) ? classes : []
   const assignedIds = user?.assignedClassIds
 
   if (!isTeacher || !assignedIds?.length) {
     return {
-      classes,
+      classes: list,
       isScopedToAssignments: Boolean(isTeacher),
       label: isTeacher ? 'Your assigned courses' : 'All classes',
     }
@@ -20,7 +21,7 @@ export function useVisibleClasses(classes: ClassDto[]) {
 
   const assigned = new Set(assignedIds)
   return {
-    classes: classes.filter((c) => assigned.has(c.id)),
+    classes: list.filter((c) => assigned.has(c.id)),
     isScopedToAssignments: true,
     label: 'Your assigned courses',
   }

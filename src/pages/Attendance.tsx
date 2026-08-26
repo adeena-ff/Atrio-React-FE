@@ -1,11 +1,12 @@
-import { Check, CheckCheck, Clock3, LoaderCircle, ShieldCheck, UserRound, X } from 'lucide-react'
+import { Check, CheckCheck, Clock3, GraduationCap, LoaderCircle, ShieldCheck, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import { notify } from '../components/common/AppToaster'
 import { PageHeader } from '../components/common/PageHeader'
+import { IconDateField, IconSelect } from '../components/common/TableControls'
 import { useAuth } from '../context/AuthContext'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
-import apiClient, { markAttendance } from '../services/api'
+import apiClient, { getClassOptions, markAttendance } from '../services/api'
 import type { AttendanceRecordDto, AttendanceStatus, ClassDto, MarkAttendanceRequestDto } from '../types'
 import { looksLikeGuid, toLocalDateString } from '../utils/date'
 
@@ -92,12 +93,12 @@ export function Attendance() {
     setLoading(true)
     setError('')
     try {
-      const result = await apiClient.get<ClassDto[]>('/classes')
-      setClasses(result.data)
+      const classList = await getClassOptions()
+      setClasses(classList)
       const scoped =
         isTeacher && assignedClassIds?.length
-          ? result.data.filter((c) => assignedClassIds.includes(c.id))
-          : result.data
+          ? classList.filter((c) => assignedClassIds.includes(c.id))
+          : classList
       const selected =
         (classId && scoped.some((c) => c.id === classId) ? classId : undefined) || scoped[0]?.id
       if (selected) {
@@ -234,35 +235,16 @@ export function Attendance() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      <div className="glass grid gap-3 rounded-2xl p-4 shadow-xl sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-5">
-        <div className="min-w-0">
-          {isScopedToAssignments && (
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-indigo-300">
-              {classLabel}
-            </p>
-          )}
-          <select
-            className="field max-w-md px-3 py-1.5 text-sm"
-            value={classId}
-            onChange={(e) => setClassId(e.target.value)}
-            aria-label={classLabel}
-          >
-            {visibleClasses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <label className="block text-xs font-medium text-slate-400">
-          Date
-          <input
-            className="mt-1.5 w-44 max-w-xs rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
+      <div className="glass grid gap-4 rounded-2xl p-4 shadow-xl sm:grid-cols-[minmax(0,1.4fr)_auto] sm:items-end sm:p-5">
+        <IconSelect
+          label={isScopedToAssignments ? classLabel : 'Class'}
+          value={classId}
+          onChange={setClassId}
+          icon={GraduationCap}
+          hideAllOption
+          options={visibleClasses.map((c) => ({ value: c.id, label: c.name }))}
+        />
+        <IconDateField label="Attendance date" value={date} onChange={setDate} />
       </div>
 
       {loading ? (

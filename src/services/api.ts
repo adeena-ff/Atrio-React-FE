@@ -14,6 +14,9 @@ import type {
 } from '../types'
 import { normalizePagedResult } from '../utils/pagination'
 
+/** Backend QueryFilter.MaximumPageSize */
+const MAX_PAGE_SIZE = 100
+
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5289/api',
   headers: {
@@ -56,12 +59,13 @@ function listParams(params: ListQueryParams) {
     search: params.search || undefined,
     classId: params.classId || undefined,
     status: params.status || undefined,
-    department: params.department || undefined,
+    academicYear: params.academicYear || undefined,
     pageNumber: params.pageNumber ?? 1,
     pageSize: params.pageSize ?? 10,
   }
 }
 
+/** Fallback only when API still returns a bare array. */
 function filterStudentsLocally(items: StudentDto[], params: ReturnType<typeof listParams>) {
   let next = items
   const term = params.search?.trim().toLowerCase()
@@ -88,7 +92,7 @@ function filterClassesLocally(items: ClassDto[], params: ReturnType<typeof listP
       (c) => c.name.toLowerCase().includes(term) || c.code.toLowerCase().includes(term),
     )
   }
-  if (params.department) next = next.filter((c) => c.academicYear === params.department)
+  if (params.academicYear) next = next.filter((c) => c.academicYear === params.academicYear)
   if (params.status === 'active') next = next.filter((c) => c.isActive)
   if (params.status === 'inactive') next = next.filter((c) => !c.isActive)
   return next
@@ -102,15 +106,41 @@ function filterTeachersLocally(items: TeacherDto[], params: ReturnType<typeof li
       (t) => t.fullName.toLowerCase().includes(term) || t.email.toLowerCase().includes(term),
     )
   }
-  if (params.classId) next = next.filter((t) => t.assignedClassIds.includes(params.classId!))
+  if (params.classId) {
+    next = next.filter((t) => (t.assignedClassIds ?? []).includes(params.classId!))
+  }
   if (params.status === 'active') next = next.filter((t) => t.isActive)
   if (params.status === 'inactive') next = next.filter((t) => !t.isActive)
   return next
 }
 
+async function fetchAllPages<T>(
+  request: (pageNumber: number, pageSize: number) => Promise<PagedResultDto<T> | T[]>,
+): Promise<T[]> {
+  const all: T[] = []
+  let pageNumber = 1
+  for (;;) {
+    const data = await request(pageNumber, MAX_PAGE_SIZE)
+    const page = normalizePagedResult(data, pageNumber, MAX_PAGE_SIZE)
+    all.push(...page.items)
+    if (!page.hasNextPage || page.items.length === 0) break
+    pageNumber += 1
+    if (pageNumber > 50) break
+  }
+  return all
+}
+
 export async function getStudentsPage(params: ListQueryParams = {}): Promise<PagedResultDto<StudentDto>> {
   const query = listParams(params)
-  const { data } = await apiClient.get<PagedResultDto<StudentDto> | StudentDto[]>('/students', { params: query })
+  const { data } = await apiClient.get<PagedResultDto<StudentDto> | StudentDto[]>('/students', {
+    params: {
+      search: query.search,
+      classId: query.classId,
+      status: query.status,
+      pageNumber: query.pageNumber,
+      pageSize: query.pageSize,
+    },
+  })
   if (Array.isArray(data)) {
     return normalizePagedResult(filterStudentsLocally(data, query), query.pageNumber!, query.pageSize!)
   }
@@ -119,17 +149,42 @@ export async function getStudentsPage(params: ListQueryParams = {}): Promise<Pag
 
 export async function getClassesPage(params: ListQueryParams = {}): Promise<PagedResultDto<ClassDto>> {
   const query = listParams(params)
-  const { data } = await apiClient.get<PagedResultDto<ClassDto> | ClassDto[]>('/classes', { params: query })
+  const { data } = await apiClient.get<PagedResultDto<ClassDto> | ClassDto[]>('/classes', {
+    params: {
+      search: query.search,
+      academicYear: query.academicYear,
+      status: query.status,
+      pageNumber: query.pageNumber,
+      pageSize: query.pageSize,
+    },
+  })
   if (Array.isArray(data)) {
     return normalizePagedResult(filterClassesLocally(data, query), query.pageNumber!, query.pageSize!)
   }
   return normalizePagedResult(data, query.pageNumber!, query.pageSize!)
 }
 
-/** Teacher management — supports search/status/classId/pageNumber/pageSize query params. */
+/** Full class list for dropdowns/filters (unwraps paged envelopes; pages until complete). */
+export async function getClassOptions(): Promise<ClassDto[]> {
+  return fetchAllPages(async (pageNumber, pageSize) => {
+    const { data } = await apiClient.get<PagedResultDto<ClassDto> | ClassDto[]>('/classes', {
+      params: { pageNumber, pageSize },
+    })
+    return data
+  })
+}
+
 export async function getTeachers(params: ListQueryParams = {}): Promise<PagedResultDto<TeacherDto>> {
   const query = listParams(params)
-  const { data } = await apiClient.get<PagedResultDto<TeacherDto> | TeacherDto[]>('/teachers', { params: query })
+  const { data } = await apiClient.get<PagedResultDto<TeacherDto> | TeacherDto[]>('/teachers', {
+    params: {
+      search: query.search,
+      classId: query.classId,
+      status: query.status,
+      pageNumber: query.pageNumber,
+      pageSize: query.pageSize,
+    },
+  })
   if (Array.isArray(data)) {
     return normalizePagedResult(filterTeachersLocally(data, query), query.pageNumber!, query.pageSize!)
   }
@@ -159,17 +214,12 @@ export async function getReportsAnalytics(
   startDate: string,
   endDate: string,
   classId?: string,
-  extras?: Pick<ListQueryParams, 'search' | 'status' | 'pageNumber' | 'pageSize'>,
 ): Promise<ReportsAnalyticsDto> {
   const { data } = await apiClient.get<ReportsAnalyticsDto>('/analytics/reports', {
     params: {
       startDate,
       endDate,
       classId: classId || undefined,
-      search: extras?.search || undefined,
-      status: extras?.status || undefined,
-      pageNumber: extras?.pageNumber,
-      pageSize: extras?.pageSize,
     },
   })
   return data

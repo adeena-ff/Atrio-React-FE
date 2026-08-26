@@ -1,4 +1,4 @@
-export type UserRole = 'Admin' | 'Staff'
+export type UserRole = 'Admin' | 'Teacher'
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'Excused'
 
@@ -8,6 +8,8 @@ export interface UserDto {
   email: string
   role: UserRole
   isActive: boolean
+  /** Populated for teachers once backend assigns classes; optional for Admin. */
+  assignedClassIds?: string[]
 }
 
 export interface LoginRequestDto {
@@ -53,6 +55,34 @@ export interface CreateClassDto {
   name: string
   code: string
   academicYear: string
+}
+
+export interface TeacherClassSummaryDto {
+  id: string
+  name: string
+  code: string
+}
+
+export interface TeacherDto {
+  id: string
+  fullName: string
+  email: string
+  isActive: boolean
+  assignedClasses: TeacherClassSummaryDto[]
+}
+
+export interface CreateTeacherDto {
+  fullName: string
+  email: string
+  password: string
+  classIds: string[]
+}
+
+export interface UpdateTeacherDto {
+  fullName: string
+  email: string
+  classIds: string[]
+  isActive?: boolean
 }
 
 export interface AttendanceRecordDto {

@@ -3,10 +3,13 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
 import { AttendanceBadge } from '../components/common/StatusBadge'
+import { useAuth } from '../context/AuthContext'
+import { useVisibleClasses } from '../hooks/useVisibleClasses'
 import apiClient from '../services/api'
 import type { ClassDto, CreateStudentDto, StudentDto } from '../types'
 
 export function Students() {
+  const { isAdmin, isTeacher } = useAuth()
   const [students, setStudents] = useState<StudentDto[]>([])
   const [classes, setClasses] = useState<ClassDto[]>([])
   const [query, setQuery] = useState('')
@@ -21,6 +24,7 @@ export function Students() {
     enrollmentNumber: '',
     classId: '',
   })
+  const { classes: visibleClasses, label: classFilterLabel } = useVisibleClasses(classes)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -48,6 +52,7 @@ export function Students() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (!isAdmin) return
     setError('')
     try {
       await apiClient.post('/students', form)
@@ -63,12 +68,18 @@ export function Students() {
     <section>
       <PageHeader
         title="Student management"
-        description="Search, review, and add live student records."
+        description={
+          isTeacher
+            ? 'View student rosters and attendance history for your classes.'
+            : 'Search, review, and add live student records.'
+        }
         action={
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={18} />
-            Add student
-          </button>
+          isAdmin ? (
+            <button className="btn-primary" onClick={() => setShowModal(true)}>
+              <Plus size={18} />
+              Add student
+            </button>
+          ) : undefined
         }
       />
 
@@ -92,9 +103,10 @@ export function Students() {
               className="field px-4 py-2.5 sm:w-56"
               value={classId}
               onChange={(e) => setClassId(e.target.value)}
+              aria-label={classFilterLabel}
             >
-              <option value="">All classes</option>
-              {classes.map((c) => (
+              <option value="">{isTeacher ? classFilterLabel : 'All classes'}</option>
+              {visibleClasses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -134,7 +146,7 @@ export function Students() {
         </div>
       )}
 
-      {showModal && (
+      {isAdmin && showModal && (
         <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm">
           <form onSubmit={submit} className="glass relative w-full max-w-lg rounded-2xl p-6 shadow-xl sm:p-7">
             <button

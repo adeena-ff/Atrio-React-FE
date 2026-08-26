@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { CreateTeacherDto, TeacherDto, UpdateTeacherDto } from '../types'
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5289/api',
@@ -26,5 +27,25 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   },
 )
+
+/** Teacher management — backend can implement these endpoints without FE contract changes. */
+export async function getTeachers(): Promise<TeacherDto[]> {
+  const { data } = await apiClient.get<TeacherDto[]>('/teachers')
+  return data
+}
+
+export async function createTeacher(payload: CreateTeacherDto): Promise<TeacherDto> {
+  const { data } = await apiClient.post<TeacherDto>('/teachers', payload)
+  return data
+}
+
+export async function updateTeacher(id: string, payload: UpdateTeacherDto): Promise<TeacherDto> {
+  const { data } = await apiClient.put<TeacherDto>(`/teachers/${id}`, payload)
+  return data
+}
+
+export async function deactivateTeacher(id: string): Promise<void> {
+  await apiClient.post(`/teachers/${id}/deactivate`)
+}
 
 export default apiClient

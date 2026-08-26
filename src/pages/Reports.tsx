@@ -7,6 +7,7 @@ import {
   CourseRadarChart,
   StatusDonutChart,
 } from '../components/common/AnalyticsCharts'
+import { notify } from '../components/common/AppToaster'
 import { PageHeader } from '../components/common/PageHeader'
 import { AttendanceBadge } from '../components/common/StatusBadge'
 import { useAuth } from '../context/AuthContext'
@@ -38,8 +39,10 @@ export function Reports() {
       const analytics = await getReportsAnalytics(startDate, endDate, classId || undefined)
       setReport(analytics ?? null)
     } catch (e) {
-      setError(errorMessage(e, 'Reports analytics could not be loaded.'))
+      const message = errorMessage(e, 'Reports analytics could not be loaded.')
+      setError(message)
       setReport(null)
+      notify.error(message)
     } finally {
       setLoading(false)
     }
@@ -93,6 +96,7 @@ export function Reports() {
     anchor.download = `atrio-attendance-${startDate}-to-${endDate}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
+    notify.success('CSV export ready')
   }
 
   const timelineStudents = useMemo(() => studentHistories.slice(0, 6), [studentHistories])
@@ -108,7 +112,7 @@ export function Reports() {
         }
         action={
           isAdmin ? (
-            <button type="button" className="btn-primary" onClick={exportCsv} disabled={!report || isEmptyReport}>
+            <button type="button" className="btn-primary cursor-pointer transition-all duration-200 active:scale-95" onClick={exportCsv} disabled={!report || isEmptyReport}>
               <Download size={18} />
               Export CSV
             </button>

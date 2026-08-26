@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { notify } from '../components/common/AppToaster'
 import type {
   CreateTeacherDto,
   DashboardAnalyticsDto,
@@ -26,11 +27,21 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status as number | undefined
+
+    if (status === 401) {
       localStorage.removeItem('atrio_token')
       localStorage.removeItem('atrio_user')
-      if (window.location.pathname !== '/login') window.location.assign('/login')
+      if (window.location.pathname !== '/login') {
+        notify.error('Session expired. Please sign in again.')
+        window.location.assign('/login')
+      }
+    } else if (status && status >= 500) {
+      notify.error('Server error. Please try again in a moment.')
+    } else if (!error.response) {
+      notify.error('Network error. Check your API connection.')
     }
+
     return Promise.reject(error)
   },
 )

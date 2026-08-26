@@ -15,6 +15,7 @@ import {
   CourseBreakdownChart,
   DailyTrendChart,
 } from '../components/common/AnalyticsCharts'
+import { notify } from '../components/common/AppToaster'
 import { PageHeader } from '../components/common/PageHeader'
 import { AttendanceBadge } from '../components/common/StatusBadge'
 import { useAuth } from '../context/AuthContext'
@@ -41,8 +42,10 @@ export function Dashboard() {
       const analytics = await getDashboardAnalytics()
       setData(analytics ?? null)
     } catch (e) {
-      setError(errorMessage(e, 'Dashboard analytics could not be loaded.'))
+      const message = errorMessage(e, 'Dashboard analytics could not be loaded.')
+      setError(message)
       setData(null)
+      notify.error(message)
     } finally {
       setLoading(false)
     }

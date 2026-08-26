@@ -1,6 +1,7 @@
 import { Check, CheckCheck, Clock3, LoaderCircle, ShieldCheck, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
+import { notify } from '../components/common/AppToaster'
 import { PageHeader } from '../components/common/PageHeader'
 import { useAuth } from '../context/AuthContext'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
@@ -19,35 +20,43 @@ const statusIcons: Record<AttendanceStatus, typeof Check> = {
 
 const statusStyles: Record<
   AttendanceStatus,
-  { idle: string; active: string; glow: string; text: string }
+  { idle: string; active: string; glow: string; text: string; ring: string }
 > = {
   Present: {
-    idle: 'border-emerald-400/25 bg-emerald-500/5 text-emerald-200/75 hover:bg-emerald-500/15 hover:scale-[1.03]',
+    idle:
+      'border-emerald-400/30 bg-emerald-500/5 text-emerald-200/80 hover:border-emerald-500/80 hover:shadow-[0_0_15px_rgba(16,185,129,0.35)] hover:bg-emerald-500/10',
     active:
-      'border-emerald-400/50 bg-gradient-to-br from-emerald-500/35 to-emerald-600/20 text-emerald-50 shadow-[0_0_24px_rgba(16,185,129,0.35)] scale-[1.04]',
+      'border-emerald-400 bg-emerald-500 text-white ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-slate-900 shadow-lg shadow-emerald-500/40 scale-[1.02]',
     glow: 'bg-emerald-400',
     text: 'text-emerald-300',
+    ring: 'ring-emerald-400/70',
   },
   Late: {
-    idle: 'border-amber-400/25 bg-amber-500/5 text-amber-200/75 hover:bg-amber-500/15 hover:scale-[1.03]',
+    idle:
+      'border-amber-400/30 bg-amber-500/5 text-amber-200/80 hover:border-amber-500/80 hover:shadow-[0_0_15px_rgba(245,158,11,0.35)] hover:bg-amber-500/10',
     active:
-      'border-amber-400/50 bg-gradient-to-br from-amber-500/35 to-amber-600/20 text-amber-50 shadow-[0_0_24px_rgba(245,158,11,0.35)] scale-[1.04]',
+      'border-amber-400 bg-amber-500 text-white ring-2 ring-amber-400/70 ring-offset-2 ring-offset-slate-900 shadow-lg shadow-amber-500/40 scale-[1.02]',
     glow: 'bg-amber-400',
     text: 'text-amber-300',
+    ring: 'ring-amber-400/70',
   },
   Absent: {
-    idle: 'border-rose-400/25 bg-rose-500/5 text-rose-200/75 hover:bg-rose-500/15 hover:scale-[1.03]',
+    idle:
+      'border-rose-400/30 bg-rose-500/5 text-rose-200/80 hover:border-rose-500/80 hover:shadow-[0_0_15px_rgba(244,63,94,0.35)] hover:bg-rose-500/10',
     active:
-      'border-rose-400/50 bg-gradient-to-br from-rose-500/35 to-rose-600/20 text-rose-50 shadow-[0_0_24px_rgba(244,63,94,0.35)] scale-[1.04]',
+      'border-rose-400 bg-rose-500 text-white ring-2 ring-rose-400/70 ring-offset-2 ring-offset-slate-900 shadow-lg shadow-rose-500/40 scale-[1.02]',
     glow: 'bg-rose-400',
     text: 'text-rose-300',
+    ring: 'ring-rose-400/70',
   },
   Excused: {
-    idle: 'border-sky-400/25 bg-sky-500/5 text-sky-200/75 hover:bg-sky-500/15 hover:scale-[1.03]',
+    idle:
+      'border-sky-400/30 bg-sky-500/5 text-sky-200/80 hover:border-sky-500/80 hover:shadow-[0_0_15px_rgba(14,165,233,0.35)] hover:bg-sky-500/10',
     active:
-      'border-sky-400/50 bg-gradient-to-br from-sky-500/35 to-blue-600/20 text-sky-50 shadow-[0_0_24px_rgba(56,189,248,0.4)] scale-[1.04]',
+      'border-sky-400 bg-sky-500 text-white ring-2 ring-sky-400/70 ring-offset-2 ring-offset-slate-900 shadow-lg shadow-sky-500/40 scale-[1.02]',
     glow: 'bg-sky-400',
     text: 'text-sky-300',
+    ring: 'ring-sky-400/70',
   },
 }
 
@@ -104,7 +113,9 @@ export function Attendance() {
         setRecords([])
       }
     } catch (e) {
-      setError(errorMessage(e, 'Attendance roll call could not be loaded.'))
+      const message = errorMessage(e, 'Attendance roll call could not be loaded.')
+      setError(message)
+      notify.error(message)
     } finally {
       setLoading(false)
     }
@@ -132,6 +143,8 @@ export function Attendance() {
         '[attendance/mark] studentId should be a Guid primary key, not an enrollment number',
         invalid,
       )
+      notify.error('Failed to mark attendance: Student ID not found')
+      throw new Error('Invalid studentId — expected Guid primary key')
     }
     await markAttendance(payload)
   }
@@ -150,9 +163,16 @@ export function Attendance() {
         records: [{ studentId: record.studentId, status }],
       })
       setSaveState('saved')
+      notify.success(`${record.studentName} marked ${status}`)
     } catch (e) {
       setSaveState('error')
-      setError(errorMessage(e, 'Attendance status could not be saved.'))
+      if (e instanceof Error && e.message.startsWith('Invalid studentId')) {
+        void load()
+        return
+      }
+      const message = errorMessage(e, 'Attendance status could not be saved.')
+      setError(message)
+      notify.error(message)
       void load()
     }
   }
@@ -175,9 +195,16 @@ export function Attendance() {
         })),
       })
       setSaveState('saved')
+      notify.success('Roll call recorded successfully!')
     } catch (e) {
       setSaveState('error')
-      setError(errorMessage(e, 'Some attendance updates could not be saved.'))
+      if (e instanceof Error && e.message.startsWith('Invalid studentId')) {
+        void load()
+        return
+      }
+      const message = errorMessage(e, 'Some attendance updates could not be saved.')
+      setError(message)
+      notify.error(message)
       void load()
     }
   }
@@ -198,7 +225,7 @@ export function Attendance() {
         title="Mark attendance"
         description="Tactile status pills save instantly — use Mark all present for a quick fill."
         action={
-          <button className="btn-primary" onClick={() => void load()}>
+          <button className="btn-primary cursor-pointer transition-all duration-200 active:scale-95" onClick={() => void load()}>
             <CheckCheck size={18} />
             Refresh roll call
           </button>
@@ -269,7 +296,7 @@ export function Attendance() {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  className="btn-secondary text-sm"
+                  className="btn-secondary cursor-pointer text-sm transition-all duration-200 active:scale-95"
                   onClick={() => void markAllPresent()}
                   disabled={records.length === 0 || saveState === 'saving'}
                 >
@@ -327,7 +354,7 @@ export function Attendance() {
                           key={status}
                           type="button"
                           onClick={() => void mark(record, status)}
-                          className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 active:scale-95 sm:min-w-[5.5rem] ${
+                          className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 active:scale-95 sm:min-w-[5.5rem] ${
                             active ? tone.active : tone.idle
                           }`}
                         >

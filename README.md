@@ -1,6 +1,6 @@
 # Atrio React Frontend
 
-Student Attendance Management System for Zynthra Technologies.
+Atrio - Student Attendance Management System.
 
 ## Stack
 

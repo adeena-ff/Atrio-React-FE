@@ -4,7 +4,7 @@ import { ErrorBanner, LoadingState, errorMessage } from '../components/common/As
 import { PageHeader } from '../components/common/PageHeader'
 import { useAuth } from '../context/AuthContext'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
-import apiClient from '../services/api'
+import apiClient, { markAttendance } from '../services/api'
 import type { AttendanceRecordDto, AttendanceStatus, ClassDto } from '../types'
 
 const statuses: AttendanceStatus[] = ['Present', 'Late', 'Absent', 'Excused']
@@ -42,11 +42,11 @@ const statusStyles: Record<
     text: 'text-rose-300',
   },
   Excused: {
-    idle: 'border-indigo-400/25 bg-indigo-500/5 text-indigo-200/75 hover:bg-indigo-500/15 hover:scale-[1.03]',
+    idle: 'border-sky-400/25 bg-sky-500/5 text-sky-200/75 hover:bg-sky-500/15 hover:scale-[1.03]',
     active:
-      'border-indigo-400/50 bg-gradient-to-br from-indigo-500/35 to-violet-600/20 text-indigo-50 shadow-[0_0_24px_rgba(99,102,241,0.4)] scale-[1.04]',
-    glow: 'bg-indigo-400',
-    text: 'text-indigo-300',
+      'border-sky-400/50 bg-gradient-to-br from-sky-500/35 to-blue-600/20 text-sky-50 shadow-[0_0_24px_rgba(56,189,248,0.4)] scale-[1.04]',
+    glow: 'bg-sky-400',
+    text: 'text-sky-300',
   },
 }
 
@@ -122,15 +122,15 @@ export function Attendance() {
   const mark = async (record: AttendanceRecordDto, status: AttendanceStatus) => {
     if (record.status === status) return
     setSaveState('saving')
+    setError('')
     setRecords((current) =>
       current.map((r) => (r.studentId === record.studentId ? { ...r, status } : r)),
     )
     try {
-      await apiClient.post('/attendance/mark', {
-        studentId: record.studentId,
+      await markAttendance({
         classId,
-        attendanceDate: date,
-        status,
+        date,
+        records: [{ studentId: record.studentId, status }],
       })
       setSaveState('saved')
     } catch (e) {
@@ -141,21 +141,22 @@ export function Attendance() {
   }
 
   const markAllPresent = async () => {
-    const changed = records.filter((record) => record.status !== 'Present')
-    if (changed.length === 0) return
+    if (records.length === 0) return
+    const alreadyAllPresent = records.every((record) => record.status === 'Present')
+    if (alreadyAllPresent) return
+
     setSaveState('saving')
-    setRecords((current) => current.map((record) => ({ ...record, status: 'Present' })))
+    setError('')
+    setRecords((current) => current.map((record) => ({ ...record, status: 'Present' as const })))
     try {
-      await Promise.all(
-        changed.map((record) =>
-          apiClient.post('/attendance/mark', {
-            studentId: record.studentId,
-            classId,
-            attendanceDate: date,
-            status: 'Present',
-          }),
-        ),
-      )
+      await markAttendance({
+        classId,
+        date,
+        records: records.map((record) => ({
+          studentId: record.studentId,
+          status: 'Present' as const,
+        })),
+      })
       setSaveState('saved')
     } catch (e) {
       setSaveState('error')

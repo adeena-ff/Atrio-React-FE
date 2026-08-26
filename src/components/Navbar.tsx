@@ -1,8 +1,30 @@
 import { Bell, LogOut, Menu } from 'lucide-react'
+import { useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
+
+function greetingForHour(hour: number) {
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
 
 export function Navbar() {
   const { user, logout } = useAuth()
+
+  const displayName = user?.name || user?.fullName || user?.email || 'User'
+  const firstName = displayName.split(/\s+/)[0] || 'User'
+  const greeting = greetingForHour(new Date().getHours())
+
+  const todayLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+    [],
+  )
 
   return (
     <header className="glass z-10 flex h-18 shrink-0 items-center justify-between border-x-0 border-t-0 px-4 sm:px-8">
@@ -12,9 +34,9 @@ export function Navbar() {
         </button>
         <div>
           <p className="font-semibold tracking-tight text-white">
-            Good morning, {user?.fullName?.split(' ')[0] ?? 'Avery'}
+            {greeting}, {firstName}
           </p>
-          <p className="text-xs text-slate-400">Tuesday, August 25, 2026</p>
+          <p className="text-xs text-slate-400">{todayLabel}</p>
         </div>
       </div>
 

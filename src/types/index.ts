@@ -5,6 +5,8 @@ export type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'Excused'
 export interface UserDto {
   id: string
   fullName: string
+  /** Optional display name alias if backend returns `name` instead of `fullName`. */
+  name?: string
   email: string
   role: UserRole
   isActive: boolean
@@ -97,6 +99,18 @@ export interface CreateAttendanceRecordDto {
   attendanceDate: string
   status: AttendanceStatus
   notes?: string
+}
+
+/** Batch mark payload expected by POST /api/attendance/mark */
+export interface MarkAttendanceRecordDto {
+  studentId: string
+  status: AttendanceStatus
+}
+
+export interface MarkAttendanceRequestDto {
+  classId: string
+  date: string
+  records: MarkAttendanceRecordDto[]
 }
 
 export interface DashboardDto { totalStudents: number; activeClasses: number; todayAttendancePercentage: number; lowAttendanceAlerts: number }

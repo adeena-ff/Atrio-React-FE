@@ -2,6 +2,7 @@ import axios from 'axios'
 import type {
   CreateTeacherDto,
   DashboardAnalyticsDto,
+  MarkAttendanceRequestDto,
   ReportsAnalyticsDto,
   TeacherDto,
   UpdateTeacherDto,
@@ -77,6 +78,11 @@ export async function getReportsAnalytics(
     params: { startDate, endDate, classId: classId || undefined },
   })
   return data
+}
+
+/** Batch attendance mark — POST /api/attendance/mark */
+export async function markAttendance(payload: MarkAttendanceRequestDto): Promise<void> {
+  await apiClient.post('/attendance/mark', payload)
 }
 
 export default apiClient

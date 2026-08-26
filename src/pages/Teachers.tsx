@@ -1,10 +1,13 @@
 import { Pencil, Plus, UserMinus, UsersRound, X } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
+import { ErrorBanner, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
+import { PaginationBar, TableControls, TableSkeleton } from '../components/common/TableControls'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { createTeacher, deactivateTeacher, getTeachers, updateTeacher } from '../services/api'
 import apiClient from '../services/api'
-import type { ClassDto, CreateTeacherDto, TeacherDto, UpdateTeacherDto } from '../types'
+import type { ClassDto, CreateTeacherDto, PagedResultDto, TeacherDto, UpdateTeacherDto } from '../types'
+import { emptyPage } from '../utils/pagination'
 
 const emptyForm: CreateTeacherDto = {
   fullName: '',
@@ -14,8 +17,13 @@ const emptyForm: CreateTeacherDto = {
 }
 
 export function Teachers() {
-  const [teachers, setTeachers] = useState<TeacherDto[]>([])
+  const [page, setPage] = useState<PagedResultDto<TeacherDto>>(emptyPage())
   const [classes, setClasses] = useState<ClassDto[]>([])
+  const [search, setSearch] = useState('')
+  const [classId, setClassId] = useState('')
+  const [status, setStatus] = useState('')
+  const [pageNumber, setPageNumber] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -23,26 +31,39 @@ export function Teachers() {
   const [form, setForm] = useState<CreateTeacherDto>(emptyForm)
   const [submitting, setSubmitting] = useState(false)
 
+  const debouncedSearch = useDebouncedValue(search, 300)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [teacherList, classList] = await Promise.all([
-        getTeachers(),
-        apiClient.get<ClassDto[]>('/classes').then((r) => r.data),
+      const [teacherPage, classList] = await Promise.all([
+        getTeachers({
+          search: debouncedSearch,
+          classId: classId || undefined,
+          status: status || undefined,
+          pageNumber,
+          pageSize,
+        }),
+        apiClient.get<ClassDto[]>('/classes').then((r) => (Array.isArray(r.data) ? r.data : [])),
       ])
-      setTeachers(teacherList)
+      setPage(teacherPage)
       setClasses(classList)
     } catch (e) {
       setError(errorMessage(e, 'Teachers could not be loaded.'))
+      setPage(emptyPage(pageNumber, pageSize))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [classId, debouncedSearch, pageNumber, pageSize, status])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    setPageNumber(1)
+  }, [debouncedSearch, classId, status])
 
   const openCreate = () => {
     setEditing(null)
@@ -61,12 +82,12 @@ export function Teachers() {
     setShowModal(true)
   }
 
-  const toggleClass = (classId: string) => {
+  const toggleClass = (id: string) => {
     setForm((current) => ({
       ...current,
-      assignedClassIds: current.assignedClassIds.includes(classId)
-        ? current.assignedClassIds.filter((id) => id !== classId)
-        : [...current.assignedClassIds, classId],
+      assignedClassIds: current.assignedClassIds.includes(id)
+        ? current.assignedClassIds.filter((value) => value !== id)
+        : [...current.assignedClassIds, id],
     }))
   }
 
@@ -114,7 +135,7 @@ export function Teachers() {
         title="Teacher Management"
         description="Create, assign, and manage teacher profiles."
         action={
-          <button type="button" className="btn-primary" onClick={openCreate}>
+          <button type="button" className="btn-primary cursor-pointer transition-all duration-200 active:scale-95" onClick={openCreate}>
             <Plus size={18} />
             Add Teacher
           </button>
@@ -123,18 +144,45 @@ export function Teachers() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      {loading ? (
-        <LoadingState label="Loading teachers..." />
-      ) : teachers.length === 0 ? (
-        <div className="glass rounded-2xl p-10 text-center shadow-xl">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/20">
-            <UsersRound size={22} />
+      <div className="glass overflow-hidden rounded-2xl shadow-xl">
+        <TableControls
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by name or email..."
+          filters={[
+            {
+              id: 'class',
+              label: 'Class',
+              value: classId,
+              onChange: setClassId,
+              allLabel: 'All classes',
+              options: classes.map((c) => ({ value: c.id, label: c.name })),
+            },
+            {
+              id: 'status',
+              label: 'Status',
+              value: status,
+              onChange: setStatus,
+              allLabel: 'All statuses',
+              options: [
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+              ],
+            },
+          ]}
+        />
+
+        {loading ? (
+          <TableSkeleton rows={6} columns={5} />
+        ) : page.items.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/20">
+              <UsersRound size={22} />
+            </div>
+            <p className="font-semibold text-white">No teachers match your filters</p>
+            <p className="mt-1 text-sm text-slate-400">Try clearing search or status filters.</p>
           </div>
-          <p className="font-semibold text-white">No teachers yet</p>
-          <p className="mt-1 text-sm text-slate-400">Add a teacher profile and assign their classes.</p>
-        </div>
-      ) : (
-        <div className="glass overflow-hidden rounded-2xl shadow-xl">
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-slate-950/40 text-xs uppercase tracking-wide text-slate-500">
@@ -147,7 +195,7 @@ export function Teachers() {
                 </tr>
               </thead>
               <tbody>
-                {teachers.map((teacher) => (
+                {page.items.map((teacher) => (
                   <tr
                     key={teacher.id}
                     className="border-t border-white/5 text-slate-300 transition hover:bg-white/[0.03]"
@@ -159,15 +207,15 @@ export function Teachers() {
                         {teacher.assignedClassIds.length === 0 ? (
                           <span className="text-xs text-slate-500">None assigned</span>
                         ) : (
-                          teacher.assignedClassIds.map((classId) => {
-                            const assignedClass = classes.find((c) => c.id === classId)
+                          teacher.assignedClassIds.map((id) => {
+                            const assignedClass = classes.find((c) => c.id === id)
                             return (
-                            <span
-                              key={classId}
-                              className="rounded-full border border-indigo-400/25 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-200"
-                            >
-                              {assignedClass?.code ?? 'Assigned class'}
-                            </span>
+                              <span
+                                key={id}
+                                className="rounded-full border border-indigo-400/25 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-200"
+                              >
+                                {assignedClass?.code ?? 'Assigned class'}
+                              </span>
                             )
                           })
                         )}
@@ -177,9 +225,7 @@ export function Teachers() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span
-                        className={`status-pill ${teacher.isActive ? 'status-high' : 'status-low'}`}
-                      >
+                      <span className={`status-pill ${teacher.isActive ? 'status-high' : 'status-low'}`}>
                         {teacher.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -187,7 +233,7 @@ export function Teachers() {
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
-                          className="btn-secondary px-3 py-2 text-xs"
+                          className="btn-secondary cursor-pointer px-3 py-2 text-xs transition-all duration-200 active:scale-95"
                           onClick={() => openEdit(teacher)}
                         >
                           <Pencil size={14} />
@@ -196,7 +242,7 @@ export function Teachers() {
                         {teacher.isActive && (
                           <button
                             type="button"
-                            className="btn-secondary px-3 py-2 text-xs text-rose-200"
+                            className="btn-secondary cursor-pointer px-3 py-2 text-xs text-rose-200 transition-all duration-200 active:scale-95"
                             onClick={() => void onDeactivate(teacher)}
                           >
                             <UserMinus size={14} />
@@ -210,8 +256,22 @@ export function Teachers() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+
+        <PaginationBar
+          pageNumber={page.pageNumber}
+          pageSize={page.pageSize}
+          totalCount={page.totalCount}
+          totalPages={page.totalPages}
+          hasPreviousPage={page.hasPreviousPage}
+          hasNextPage={page.hasNextPage}
+          onPageChange={setPageNumber}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPageNumber(1)
+          }}
+        />
+      </div>
 
       {showModal && (
         <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm">

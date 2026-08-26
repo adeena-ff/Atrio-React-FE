@@ -10,14 +10,19 @@ import {
 import { notify } from '../components/common/AppToaster'
 import { PageHeader } from '../components/common/PageHeader'
 import { AttendanceBadge } from '../components/common/StatusBadge'
+import { PaginationBar, TableControls, TableSkeleton } from '../components/common/TableControls'
 import { useAuth } from '../context/AuthContext'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
 import apiClient, { getReportsAnalytics } from '../services/api'
-import type { ClassDto, ReportsAnalyticsDto } from '../types'
+import type { ClassDto, ReportsAnalyticsDto, StudentMonthlyRowDto } from '../types'
 import { daysAgoLocal, toLocalDateString } from '../utils/date'
+import { paginateLocally } from '../utils/pagination'
 
 const dateInputClass =
   'w-full max-w-xs rounded-lg border border-white/15 bg-slate-950/70 px-3 py-1.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30'
+
+type ReportStudentRow = StudentMonthlyRowDto & { className: string; classId: string }
 
 export function Reports() {
   const { isAdmin, isTeacher } = useAuth()
@@ -25,10 +30,15 @@ export function Reports() {
   const [classId, setClassId] = useState('')
   const [startDate, setStartDate] = useState(() => daysAgoLocal(60))
   const [endDate, setEndDate] = useState(() => toLocalDateString())
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [pageNumber, setPageNumber] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [report, setReport] = useState<ReportsAnalyticsDto | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const { classes: visibleClasses, label: classLabel, isScopedToAssignments } = useVisibleClasses(classes)
+  const debouncedSearch = useDebouncedValue(search, 300)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -36,7 +46,12 @@ export function Reports() {
     try {
       const classResult = await apiClient.get<ClassDto[]>('/classes')
       setClasses(classResult.data ?? [])
-      const analytics = await getReportsAnalytics(startDate, endDate, classId || undefined)
+      const analytics = await getReportsAnalytics(startDate, endDate, classId || undefined, {
+        search: debouncedSearch,
+        status: status || undefined,
+        pageNumber,
+        pageSize,
+      })
       setReport(analytics ?? null)
     } catch (e) {
       const message = errorMessage(e, 'Reports analytics could not be loaded.')
@@ -46,11 +61,15 @@ export function Reports() {
     } finally {
       setLoading(false)
     }
-  }, [classId, endDate, startDate])
+  }, [classId, debouncedSearch, endDate, pageNumber, pageSize, startDate, status])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    setPageNumber(1)
+  }, [debouncedSearch, status, classId, startDate, endDate])
 
   const kpis = {
     totalEvents: report?.kpis?.totalEvents ?? 0,
@@ -63,6 +82,32 @@ export function Reports() {
   const courseRadar = report?.courseRadar ?? []
   const classBreakdown = report?.classBreakdown ?? []
   const studentHistories = report?.studentHistories ?? []
+
+  const flatStudents = useMemo(() => {
+    const rows: ReportStudentRow[] = classBreakdown.flatMap((course) =>
+      (course?.students ?? []).map((student) => ({
+        ...student,
+        className: course?.className ?? 'Class',
+        classId: course?.classId ?? '',
+      })),
+    )
+
+    let filtered = rows
+    const term = debouncedSearch.trim().toLowerCase()
+    if (term) {
+      filtered = filtered.filter(
+        (row) =>
+          row.studentName.toLowerCase().includes(term) ||
+          row.enrollmentNumber.toLowerCase().includes(term) ||
+          row.className.toLowerCase().includes(term),
+      )
+    }
+    if (status === 'at-risk') filtered = filtered.filter((row) => row.percentage < 75)
+    if (status === 'watch') filtered = filtered.filter((row) => row.percentage >= 75 && row.percentage < 85)
+    if (status === 'healthy') filtered = filtered.filter((row) => row.percentage >= 85)
+
+    return paginateLocally(filtered, pageNumber, pageSize)
+  }, [classBreakdown, debouncedSearch, pageNumber, pageSize, status])
 
   const isEmptyReport =
     !!report &&
@@ -112,7 +157,12 @@ export function Reports() {
         }
         action={
           isAdmin ? (
-            <button type="button" className="btn-primary cursor-pointer transition-all duration-200 active:scale-95" onClick={exportCsv} disabled={!report || isEmptyReport}>
+            <button
+              type="button"
+              className="btn-primary cursor-pointer transition-all duration-200 active:scale-95"
+              onClick={exportCsv}
+              disabled={!report || isEmptyReport}
+            >
               <Download size={18} />
               Export CSV
             </button>
@@ -246,60 +296,85 @@ export function Reports() {
             </article>
           )}
 
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold tracking-tight text-white">
-              {isTeacher ? 'Class attendance breakdown' : 'Course detail tables'}
-            </h2>
-            {classBreakdown.length === 0 ? (
-              <EmptyReportsBanner compact />
+          <div className="glass overflow-hidden rounded-2xl shadow-xl">
+            <div className="border-b border-white/10 px-4 py-4 sm:px-5">
+              <h2 className="text-lg font-semibold tracking-tight text-white">
+                {isTeacher ? 'Class attendance breakdown' : 'Learner detail table'}
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">Search and filter learners across the selected report window.</p>
+            </div>
+
+            <TableControls
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Search by student name or ID..."
+              filters={[
+                {
+                  id: 'status',
+                  label: 'Attendance band',
+                  value: status,
+                  onChange: setStatus,
+                  allLabel: 'All bands',
+                  options: [
+                    { value: 'healthy', label: 'Healthy (≥85%)' },
+                    { value: 'watch', label: 'Watch (75–84%)' },
+                    { value: 'at-risk', label: 'At risk (<75%)' },
+                  ],
+                },
+              ]}
+            />
+
+            {loading ? (
+              <TableSkeleton rows={6} columns={5} />
+            ) : flatStudents.items.length === 0 ? (
+              <p className="px-5 py-12 text-center text-sm text-slate-500">No learners match your filters.</p>
             ) : (
-              classBreakdown.map((course) => (
-                <article key={course?.classId ?? course?.code} className="glass overflow-hidden rounded-2xl shadow-xl">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">
-                    <div>
-                      <p className="font-semibold text-white">
-                        {course?.className ?? 'Class'}{' '}
-                        <span className="text-sm font-normal text-slate-500">({course?.code})</span>
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        P {course?.present ?? 0} · L {course?.late ?? 0} · A {course?.absent ?? 0} · E{' '}
-                        {course?.excused ?? 0}
-                      </p>
-                    </div>
-                    <AttendanceBadge percentage={course?.percentage ?? 0} />
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[560px] text-left text-sm">
-                      <thead className="bg-slate-950/40 text-xs uppercase tracking-wide text-slate-500">
-                        <tr>
-                          <th className="px-4 py-3 font-semibold sm:px-5">Student</th>
-                          <th className="px-3 py-3 font-semibold">Enrollment</th>
-                          <th className="px-3 py-3 font-semibold">P / L / A / E</th>
-                          <th className="px-4 py-3 font-semibold sm:px-5">%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(course?.students ?? []).map((s) => (
-                          <tr
-                            key={s?.studentId ?? s?.enrollmentNumber}
-                            className="border-t border-white/5 text-slate-300 hover:bg-white/[0.03]"
-                          >
-                            <td className="px-4 py-3 font-medium text-white sm:px-5">{s?.studentName}</td>
-                            <td className="px-3 py-3">{s?.enrollmentNumber}</td>
-                            <td className="px-3 py-3 text-xs">
-                              {s?.present ?? 0} / {s?.late ?? 0} / {s?.absent ?? 0} / {s?.excused ?? 0}
-                            </td>
-                            <td className="px-4 py-3 sm:px-5">
-                              <AttendanceBadge percentage={s?.percentage ?? 0} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </article>
-              ))
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="bg-slate-950/40 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold sm:px-5">Student</th>
+                      <th className="px-3 py-3 font-semibold">Class</th>
+                      <th className="px-3 py-3 font-semibold">Enrollment</th>
+                      <th className="px-3 py-3 font-semibold">P / L / A / E</th>
+                      <th className="px-4 py-3 font-semibold sm:px-5">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {flatStudents.items.map((s) => (
+                      <tr
+                        key={`${s.classId}-${s.studentId}`}
+                        className="border-t border-white/5 text-slate-300 hover:bg-white/[0.03]"
+                      >
+                        <td className="px-4 py-3 font-medium text-white sm:px-5">{s.studentName}</td>
+                        <td className="px-3 py-3">{s.className}</td>
+                        <td className="px-3 py-3">{s.enrollmentNumber}</td>
+                        <td className="px-3 py-3 text-xs">
+                          {s.present} / {s.late} / {s.absent} / {s.excused}
+                        </td>
+                        <td className="px-4 py-3 sm:px-5">
+                          <AttendanceBadge percentage={s.percentage} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
+
+            <PaginationBar
+              pageNumber={flatStudents.pageNumber}
+              pageSize={flatStudents.pageSize}
+              totalCount={flatStudents.totalCount}
+              totalPages={flatStudents.totalPages}
+              hasPreviousPage={flatStudents.hasPreviousPage}
+              hasNextPage={flatStudents.hasNextPage}
+              onPageChange={setPageNumber}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setPageNumber(1)
+              }}
+            />
           </div>
         </>
       )}

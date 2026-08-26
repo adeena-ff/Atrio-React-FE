@@ -1,13 +1,18 @@
 import axios from 'axios'
 import { notify } from '../components/common/AppToaster'
 import type {
+  ClassDto,
   CreateTeacherDto,
   DashboardAnalyticsDto,
+  ListQueryParams,
   MarkAttendanceRequestDto,
+  PagedResultDto,
   ReportsAnalyticsDto,
+  StudentDto,
   TeacherDto,
   UpdateTeacherDto,
 } from '../types'
+import { normalizePagedResult } from '../utils/pagination'
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5289/api',
@@ -46,10 +51,89 @@ apiClient.interceptors.response.use(
   },
 )
 
-/** Teacher management — backend can implement these endpoints without FE contract changes. */
-export async function getTeachers(): Promise<TeacherDto[]> {
-  const { data } = await apiClient.get<TeacherDto[]>('/teachers')
-  return data
+function listParams(params: ListQueryParams) {
+  return {
+    search: params.search || undefined,
+    classId: params.classId || undefined,
+    status: params.status || undefined,
+    department: params.department || undefined,
+    pageNumber: params.pageNumber ?? 1,
+    pageSize: params.pageSize ?? 10,
+  }
+}
+
+function filterStudentsLocally(items: StudentDto[], params: ReturnType<typeof listParams>) {
+  let next = items
+  const term = params.search?.trim().toLowerCase()
+  if (term) {
+    next = next.filter(
+      (s) =>
+        `${s.firstName} ${s.lastName}`.toLowerCase().includes(term) ||
+        s.enrollmentNumber.toLowerCase().includes(term) ||
+        s.email.toLowerCase().includes(term),
+    )
+  }
+  if (params.classId) next = next.filter((s) => s.classId === params.classId)
+  if (params.status === 'active') next = next.filter((s) => s.isActive)
+  if (params.status === 'inactive') next = next.filter((s) => !s.isActive)
+  if (params.status === 'at-risk') next = next.filter((s) => s.attendancePercentage < 75)
+  return next
+}
+
+function filterClassesLocally(items: ClassDto[], params: ReturnType<typeof listParams>) {
+  let next = items
+  const term = params.search?.trim().toLowerCase()
+  if (term) {
+    next = next.filter(
+      (c) => c.name.toLowerCase().includes(term) || c.code.toLowerCase().includes(term),
+    )
+  }
+  if (params.department) next = next.filter((c) => c.academicYear === params.department)
+  if (params.status === 'active') next = next.filter((c) => c.isActive)
+  if (params.status === 'inactive') next = next.filter((c) => !c.isActive)
+  return next
+}
+
+function filterTeachersLocally(items: TeacherDto[], params: ReturnType<typeof listParams>) {
+  let next = items
+  const term = params.search?.trim().toLowerCase()
+  if (term) {
+    next = next.filter(
+      (t) => t.fullName.toLowerCase().includes(term) || t.email.toLowerCase().includes(term),
+    )
+  }
+  if (params.classId) next = next.filter((t) => t.assignedClassIds.includes(params.classId!))
+  if (params.status === 'active') next = next.filter((t) => t.isActive)
+  if (params.status === 'inactive') next = next.filter((t) => !t.isActive)
+  return next
+}
+
+export async function getStudentsPage(params: ListQueryParams = {}): Promise<PagedResultDto<StudentDto>> {
+  const query = listParams(params)
+  const { data } = await apiClient.get<PagedResultDto<StudentDto> | StudentDto[]>('/students', { params: query })
+  if (Array.isArray(data)) {
+    return normalizePagedResult(filterStudentsLocally(data, query), query.pageNumber!, query.pageSize!)
+  }
+  return normalizePagedResult(data, query.pageNumber!, query.pageSize!)
+}
+
+export async function getClassesPage(params: ListQueryParams = {}): Promise<PagedResultDto<ClassDto>> {
+  const query = listParams(params)
+  const { data } = await apiClient.get<PagedResultDto<ClassDto> | ClassDto[]>('/classes', { params: query })
+  if (Array.isArray(data)) {
+    return normalizePagedResult(filterClassesLocally(data, query), query.pageNumber!, query.pageSize!)
+  }
+  return normalizePagedResult(data, query.pageNumber!, query.pageSize!)
+}
+
+/** Teacher management — supports search/status/classId/pageNumber/pageSize query params. */
+export async function getTeachers(params: ListQueryParams = {}): Promise<PagedResultDto<TeacherDto>> {
+  const query = listParams(params)
+  const { data } = await apiClient.get<PagedResultDto<TeacherDto> | TeacherDto[]>('/teachers', { params: query })
+  if (Array.isArray(data)) {
+    return normalizePagedResult(filterTeachersLocally(data, query), query.pageNumber!, query.pageSize!)
+  }
+  return normalizePagedResult(data, query.pageNumber!, query.pageSize!)
 }
 
 export async function createTeacher(payload: CreateTeacherDto): Promise<TeacherDto> {
@@ -66,32 +150,31 @@ export async function deactivateTeacher(id: string): Promise<void> {
   await apiClient.post(`/teachers/${id}/deactivate`)
 }
 
-/**
- * Operational real-time analytics for the Dashboard.
- * GET /api/analytics/dashboard
- * Role scoping is derived from the bearer token.
- */
 export async function getDashboardAnalytics(): Promise<DashboardAnalyticsDto> {
   const { data } = await apiClient.get<DashboardAnalyticsDto>('/analytics/dashboard')
   return data
 }
 
-/**
- * Historical analytical reports.
- * GET /api/analytics/reports?startDate=&endDate=&classId=
- */
 export async function getReportsAnalytics(
   startDate: string,
   endDate: string,
   classId?: string,
+  extras?: Pick<ListQueryParams, 'search' | 'status' | 'pageNumber' | 'pageSize'>,
 ): Promise<ReportsAnalyticsDto> {
   const { data } = await apiClient.get<ReportsAnalyticsDto>('/analytics/reports', {
-    params: { startDate, endDate, classId: classId || undefined },
+    params: {
+      startDate,
+      endDate,
+      classId: classId || undefined,
+      search: extras?.search || undefined,
+      status: extras?.status || undefined,
+      pageNumber: extras?.pageNumber,
+      pageSize: extras?.pageSize,
+    },
   })
   return data
 }
 
-/** Batch attendance mark — POST /api/attendance/mark */
 export async function markAttendance(payload: MarkAttendanceRequestDto): Promise<void> {
   await apiClient.post('/attendance/mark', payload)
 }

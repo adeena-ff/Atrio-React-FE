@@ -1,11 +1,15 @@
 import { BookOpen, Plus, Users, X } from 'lucide-react'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { ErrorBanner, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
+import { PaginationBar, TableControls, TableSkeleton } from '../components/common/TableControls'
 import { useAuth } from '../context/AuthContext'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
+import { getClassesPage } from '../services/api'
 import apiClient from '../services/api'
-import type { ClassDto, CreateClassDto } from '../types'
+import type { ClassDto, CreateClassDto, PagedResultDto } from '../types'
+import { emptyPage } from '../utils/pagination'
 
 const emptyForm: CreateClassDto = {
   name: '',
@@ -15,28 +19,63 @@ const emptyForm: CreateClassDto = {
 
 export function Classes() {
   const { isAdmin, isTeacher } = useAuth()
-  const [classes, setClasses] = useState<ClassDto[]>([])
+  const [page, setPage] = useState<PagedResultDto<ClassDto>>(emptyPage())
+  const [yearOptions, setYearOptions] = useState<string[]>([])
+  const [search, setSearch] = useState('')
+  const [department, setDepartment] = useState('')
+  const [status, setStatus] = useState('')
+  const [pageNumber, setPageNumber] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<CreateClassDto>(emptyForm)
-  const { classes: visibleClasses, isScopedToAssignments } = useVisibleClasses(classes)
+
+  const debouncedSearch = useDebouncedValue(search, 300)
+  const { isScopedToAssignments } = useVisibleClasses(page.items)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      setClasses((await apiClient.get<ClassDto[]>('/classes')).data)
+      const result = await getClassesPage({
+        search: debouncedSearch,
+        department: department || undefined,
+        status: status || undefined,
+        pageNumber,
+        pageSize,
+      })
+      setPage(result)
+      const years = Array.from(
+        new Set(
+          (
+            await apiClient.get<ClassDto[] | PagedResultDto<ClassDto>>('/classes').then((r) =>
+              Array.isArray(r.data) ? r.data : (r.data.items ?? []),
+            )
+          ).map((c) => c.academicYear),
+        ),
+      ).sort()
+      setYearOptions(years)
     } catch (e) {
       setError(errorMessage(e, 'Classes could not be loaded.'))
+      setPage(emptyPage(pageNumber, pageSize))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [debouncedSearch, department, pageNumber, pageSize, status])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    setPageNumber(1)
+  }, [debouncedSearch, department, status])
+
+  const departmentFilters = useMemo(
+    () => yearOptions.map((year) => ({ value: year, label: `Year ${year}` })),
+    [yearOptions],
+  )
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -53,7 +92,7 @@ export function Classes() {
   }
 
   return (
-    <section>
+    <section className="space-y-5">
       <PageHeader
         title="Class management"
         description={
@@ -63,7 +102,7 @@ export function Classes() {
         }
         action={
           isAdmin ? (
-            <button type="button" className="btn-primary" onClick={() => setShowModal(true)}>
+            <button type="button" className="btn-primary cursor-pointer transition-all duration-200 active:scale-95" onClick={() => setShowModal(true)}>
               <Plus size={18} />
               Create class
             </button>
@@ -74,45 +113,90 @@ export function Classes() {
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
       {isTeacher && isScopedToAssignments && (
-        <p className="mb-5 text-sm text-indigo-200/90">
-          Showing classes assigned to your teacher account.
-        </p>
+        <p className="text-sm text-indigo-200/90">Showing classes assigned to your teacher account.</p>
       )}
 
-      {loading ? (
-        <LoadingState label="Loading classes..." />
-      ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {visibleClasses.map((course) => (
-            <article
-              key={course.id}
-              className="glass group overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:shadow-xl"
-            >
-              <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-sky-500" />
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-2xl bg-indigo-500/15 p-3 text-indigo-300 ring-1 ring-indigo-400/20">
-                    <BookOpen size={22} />
+      <div className="glass overflow-hidden rounded-2xl shadow-xl">
+        <TableControls
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by class name or code..."
+          filters={[
+            {
+              id: 'department',
+              label: 'Academic year',
+              value: department,
+              onChange: setDepartment,
+              allLabel: 'All years',
+              options: departmentFilters,
+            },
+            {
+              id: 'status',
+              label: 'Status',
+              value: status,
+              onChange: setStatus,
+              allLabel: 'All statuses',
+              options: [
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+              ],
+            },
+          ]}
+        />
+
+        {loading ? (
+          <div className="p-5">
+            <TableSkeleton rows={6} columns={3} />
+          </div>
+        ) : page.items.length === 0 ? (
+          <p className="px-5 py-12 text-center text-sm text-slate-500">No classes match your filters.</p>
+        ) : (
+          <div className="grid gap-5 p-5 md:grid-cols-2 xl:grid-cols-3">
+            {page.items.map((course) => (
+              <article
+                key={course.id}
+                className="glass group overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:shadow-xl"
+              >
+                <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-sky-500" />
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="rounded-2xl bg-indigo-500/15 p-3 text-indigo-300 ring-1 ring-indigo-400/20">
+                      <BookOpen size={22} />
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                      {course.code}
+                    </span>
                   </div>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-                    {course.code}
-                  </span>
-                </div>
 
-                <h2 className="mt-5 text-lg font-semibold tracking-tight text-white">{course.name}</h2>
-                <p className="mt-1.5 text-sm text-slate-400">Academic year {course.academicYear}</p>
+                  <h2 className="mt-5 text-lg font-semibold tracking-tight text-white">{course.name}</h2>
+                  <p className="mt-1.5 text-sm text-slate-400">Academic year {course.academicYear}</p>
 
-                <div className="mt-6 flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-slate-300">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-sky-200">
-                    <Users size={14} />
-                    {course.studentCount} students
-                  </span>
+                  <div className="mt-6 flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-slate-300">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-sky-200">
+                      <Users size={14} />
+                      {course.studentCount} students
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
+              </article>
+            ))}
+          </div>
+        )}
+
+        <PaginationBar
+          pageNumber={page.pageNumber}
+          pageSize={page.pageSize}
+          totalCount={page.totalCount}
+          totalPages={page.totalPages}
+          hasPreviousPage={page.hasPreviousPage}
+          hasNextPage={page.hasNextPage}
+          onPageChange={setPageNumber}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPageNumber(1)
+          }}
+        />
+      </div>
 
       {isAdmin && showModal && (
         <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm">

@@ -117,6 +117,25 @@ export interface DashboardDto { totalStudents: number; activeClasses: number; to
 export interface StudentMonthlyRowDto { studentId: string; studentName: string; enrollmentNumber: string; present: number; absent: number; late: number; excused: number; percentage: number }
 export interface MonthlyReportDto { year: number; month: number; className?: string; overallPercentage: number; students: StudentMonthlyRowDto[] }
 
+export interface PagedResultDto<T> {
+  items: T[]
+  pageNumber: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+}
+
+export interface ListQueryParams {
+  search?: string
+  classId?: string
+  status?: string
+  department?: string
+  pageNumber?: number
+  pageSize?: number
+}
+
 /** Point on a daily attendance trend series (Dashboard operational charts). */
 export interface DailyAttendancePointDto {
   date: string

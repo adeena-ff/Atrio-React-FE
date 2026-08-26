@@ -1,19 +1,25 @@
-import { Plus, Search, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
+import { ErrorBanner, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
 import { AttendanceBadge } from '../components/common/StatusBadge'
+import { PaginationBar, TableControls, TableSkeleton } from '../components/common/TableControls'
 import { useAuth } from '../context/AuthContext'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useVisibleClasses } from '../hooks/useVisibleClasses'
-import apiClient from '../services/api'
-import type { ClassDto, CreateStudentDto, StudentDto } from '../types'
+import apiClient, { getStudentsPage } from '../services/api'
+import type { ClassDto, CreateStudentDto, PagedResultDto, StudentDto } from '../types'
+import { emptyPage } from '../utils/pagination'
 
 export function Students() {
   const { isAdmin, isTeacher } = useAuth()
-  const [students, setStudents] = useState<StudentDto[]>([])
-  const [classes, setClasses] = useState<ClassDto[]>([])
-  const [query, setQuery] = useState('')
+  const [page, setPage] = useState<PagedResultDto<StudentDto>>(emptyPage())
+  const [allClasses, setAllClasses] = useState<ClassDto[]>([])
+  const [search, setSearch] = useState('')
   const [classId, setClassId] = useState('')
+  const [status, setStatus] = useState('')
+  const [pageNumber, setPageNumber] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -24,31 +30,43 @@ export function Students() {
     enrollmentNumber: '',
     classId: '',
   })
-  const { classes: visibleClasses, label: classFilterLabel } = useVisibleClasses(classes)
+
+  const debouncedSearch = useDebouncedValue(search, 300)
+  const { classes: visibleClasses, label: classFilterLabel } = useVisibleClasses(allClasses)
+
+  const resetToFirstPage = () => setPageNumber(1)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [studentResult, classResult] = await Promise.all([
-        apiClient.get<StudentDto[]>('/students', {
-          params: { search: query || undefined, classId: classId || undefined },
+      const [studentPage, classResult] = await Promise.all([
+        getStudentsPage({
+          search: debouncedSearch,
+          classId: classId || undefined,
+          status: status || undefined,
+          pageNumber,
+          pageSize,
         }),
         apiClient.get<ClassDto[]>('/classes'),
       ])
-      setStudents(studentResult.data)
-      setClasses(classResult.data)
+      setPage(studentPage)
+      setAllClasses(Array.isArray(classResult.data) ? classResult.data : [])
     } catch (e) {
       setError(errorMessage(e, 'Students could not be loaded.'))
+      setPage(emptyPage(pageNumber, pageSize))
     } finally {
       setLoading(false)
     }
-  }, [query, classId])
+  }, [classId, debouncedSearch, pageNumber, pageSize, status])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 250)
-    return () => window.clearTimeout(timer)
+    void load()
   }, [load])
+
+  useEffect(() => {
+    resetToFirstPage()
+  }, [debouncedSearch, classId, status])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -75,7 +93,7 @@ export function Students() {
         }
         action={
           isAdmin ? (
-            <button className="btn-primary" onClick={() => setShowModal(true)}>
+            <button className="btn-primary cursor-pointer transition-all duration-200 active:scale-95" onClick={() => setShowModal(true)}>
               <Plus size={18} />
               Add student
             </button>
@@ -85,35 +103,38 @@ export function Students() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      {loading ? (
-        <LoadingState label="Loading students..." />
-      ) : (
-        <div className="glass overflow-hidden rounded-2xl shadow-xl">
-          <div className="flex flex-col gap-3 border-b border-white/10 p-4 sm:flex-row sm:items-center sm:p-5">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-              <input
-                className="field field-with-icon"
-                placeholder="Search by name, enrollment or email"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <select
-              className="field px-4 py-2.5 sm:w-56"
-              value={classId}
-              onChange={(e) => setClassId(e.target.value)}
-              aria-label={classFilterLabel}
-            >
-              <option value="">{isTeacher ? classFilterLabel : 'All classes'}</option>
-              {visibleClasses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+      <div className="glass overflow-hidden rounded-2xl shadow-xl">
+        <TableControls
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by name or student ID..."
+          filters={[
+            {
+              id: 'class',
+              label: 'Class',
+              value: classId,
+              onChange: setClassId,
+              allLabel: isTeacher ? classFilterLabel : 'All classes',
+              options: visibleClasses.map((c) => ({ value: c.id, label: c.name })),
+            },
+            {
+              id: 'status',
+              label: 'Status',
+              value: status,
+              onChange: setStatus,
+              allLabel: 'All statuses',
+              options: [
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+                { value: 'at-risk', label: 'At risk (<75%)' },
+              ],
+            },
+          ]}
+        />
 
+        {loading ? (
+          <TableSkeleton rows={pageSize > 10 ? 8 : 6} columns={4} />
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-180 text-left text-sm">
               <thead className="bg-slate-950/40 text-xs uppercase tracking-wide text-slate-500">
@@ -125,26 +146,48 @@ export function Students() {
                 </tr>
               </thead>
               <tbody>
-                {students.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="border-t border-white/5 text-slate-300 transition hover:bg-white/[0.03]"
-                  >
-                    <td className="px-5 py-4 font-medium text-white">
-                      {s.firstName} {s.lastName}
-                    </td>
-                    <td className="px-4 py-4">{s.enrollmentNumber}</td>
-                    <td className="px-4 py-4">{s.className}</td>
-                    <td className="px-5 py-4">
-                      <AttendanceBadge percentage={s.attendancePercentage} />
+                {page.items.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-12 text-center text-sm text-slate-500">
+                      No students match your filters.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  page.items.map((s) => (
+                    <tr
+                      key={s.id}
+                      className="border-t border-white/5 text-slate-300 transition hover:bg-white/[0.03]"
+                    >
+                      <td className="px-5 py-4 font-medium text-white">
+                        {s.firstName} {s.lastName}
+                      </td>
+                      <td className="px-4 py-4">{s.enrollmentNumber}</td>
+                      <td className="px-4 py-4">{s.className}</td>
+                      <td className="px-5 py-4">
+                        <AttendanceBadge percentage={s.attendancePercentage} />
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+
+        <PaginationBar
+          pageNumber={page.pageNumber}
+          pageSize={page.pageSize}
+          totalCount={page.totalCount}
+          totalPages={page.totalPages}
+          hasPreviousPage={page.hasPreviousPage}
+          hasNextPage={page.hasNextPage}
+          onPageChange={setPageNumber}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPageNumber(1)
+          }}
+        />
+      </div>
 
       {isAdmin && showModal && (
         <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm">
@@ -186,7 +229,7 @@ export function Students() {
               onChange={(e) => setForm({ ...form, classId: e.target.value })}
             >
               <option value="">Choose a class</option>
-              {classes.map((c) => (
+              {allClasses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>

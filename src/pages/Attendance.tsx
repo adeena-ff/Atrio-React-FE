@@ -1,4 +1,4 @@
-import { CheckCheck } from 'lucide-react'
+import { Check, CheckCheck, Clock3, ShieldCheck, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
@@ -8,6 +8,13 @@ import apiClient from '../services/api'
 import type { AttendanceRecordDto, AttendanceStatus, ClassDto } from '../types'
 
 const statuses: AttendanceStatus[] = ['Present', 'Late', 'Absent', 'Excused']
+
+const statusIcons: Record<AttendanceStatus, typeof Check> = {
+  Present: Check,
+  Late: Clock3,
+  Absent: X,
+  Excused: ShieldCheck,
+}
 
 const statusStyles: Record<AttendanceStatus, { idle: string; active: string }> = {
   Present: {
@@ -91,6 +98,22 @@ export function Attendance() {
     }
   }
 
+  const markAllPresent = async () => {
+    const changed = records.filter((record) => record.status !== 'Present')
+    if (changed.length === 0) return
+    setRecords((current) => current.map((record) => ({ ...record, status: 'Present' })))
+    try {
+      await Promise.all(changed.map((record) => apiClient.post('/attendance/mark', {
+        studentId: record.studentId, classId, attendanceDate: date, status: 'Present',
+      })))
+    } catch (e) {
+      setError(errorMessage(e, 'Some attendance updates could not be saved.'))
+      void load()
+    }
+  }
+
+  const statusCount = (status: AttendanceStatus) => records.filter((record) => record.status === status).length
+
   return (
     <section>
       <PageHeader
@@ -136,26 +159,52 @@ export function Attendance() {
         <LoadingState label="Loading roll call..." />
       ) : (
         <div className="glass overflow-hidden rounded-2xl shadow-xl">
+          <div className="flex flex-col gap-4 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.14em] text-indigo-300">LIVE ROLL CALL</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">{records.length} learners ready to review</h2>
+              <p className="mt-1 text-sm text-slate-400">Every selection saves immediately. You can safely revisit any historical date.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {statuses.map((status) => (
+                <span key={status} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${statusStyles[status].idle}`}>
+                  {statusCount(status)} {status.toLowerCase()}
+                </span>
+              ))}
+              <button type="button" className="btn-secondary text-sm" onClick={() => void markAllPresent()}>
+                <CheckCheck size={16} /> Mark all present
+              </button>
+            </div>
+          </div>
           {records.map((record) => (
             <div
               key={record.studentId}
-              className="flex flex-col gap-3 border-b border-white/5 px-4 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+              className="flex flex-col gap-4 border-b border-white/5 px-4 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
             >
-              <p className="font-medium tracking-tight text-white">{record.studentName}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-400/20">
+                  <UserRound size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold tracking-tight text-white">{record.studentName}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{record.status === 'Present' ? 'Ready for class' : `Marked ${record.status.toLowerCase()}`}</p>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 {statuses.map((status) => {
                   const active = record.status === status
                   const styles = statusStyles[status]
+                  const Icon = statusIcons[status]
                   return (
                     <button
                       key={status}
                       type="button"
                       onClick={() => void mark(record, status)}
-                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 sm:min-w-22 ${
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 active:scale-95 sm:min-w-24 ${
                         active ? styles.active : styles.idle
                       }`}
                     >
-                      {status}
+                      <Icon size={14} /> {status}
                     </button>
                   )
                 })}

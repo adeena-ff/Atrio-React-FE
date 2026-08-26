@@ -2,9 +2,11 @@ import { AlertTriangle, ArrowRight, BookOpen, CalendarCheck, CheckCircle2, Clipb
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
+import { AttendanceDistribution, AttendanceTrend } from '../components/common/AnalyticsCharts'
 import { PageHeader } from '../components/common/PageHeader'
+import { useAuth } from '../context/AuthContext'
 import apiClient from '../services/api'
-import type { DashboardDto } from '../types'
+import type { ClassDto, DashboardDto, MonthlyReportDto } from '../types'
 
 const cards = [
   { key: 'totalStudents', label: 'Total students', icon: Users, tone: 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/20', detail: 'Active student records' },
@@ -14,17 +16,42 @@ const cards = [
 ] as const
 
 export function Dashboard() {
+  const { isTeacher, user } = useAuth()
   const [data, setData] = useState<DashboardDto>()
+  const [monthlyReport, setMonthlyReport] = useState<MonthlyReportDto>()
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     setError('')
     try {
-      setData((await apiClient.get<DashboardDto>('/dashboard')).data)
+      const [dashboard, classes] = await Promise.all([
+        apiClient.get<DashboardDto>('/dashboard'),
+        apiClient.get<ClassDto[]>('/classes'),
+      ])
+      const scopedClasses = isTeacher && user?.assignedClassIds?.length
+        ? classes.data.filter((course) => user.assignedClassIds?.includes(course.id))
+        : classes.data
+      const reportRequests = (isTeacher ? scopedClasses.map((course) => course.id) : [undefined]).map((classId) =>
+        apiClient.get<MonthlyReportDto>('/attendance/reports/monthly', {
+          params: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, classId },
+        }),
+      )
+      const reports = await Promise.all(reportRequests)
+      const rows = reports.flatMap((report) => report.data.students)
+      const report = reports[0]?.data
+      setData(dashboard.data)
+      if (report) {
+        setMonthlyReport({
+          ...report,
+          className: isTeacher ? 'Your assigned courses' : report.className,
+          overallPercentage: rows.length ? Math.round(rows.reduce((total, row) => total + row.percentage, 0) / rows.length * 100) / 100 : 0,
+          students: rows,
+        })
+      }
     } catch (e) {
       setError(errorMessage(e, 'Dashboard data could not be loaded.'))
     }
-  }, [])
+  }, [isTeacher, user?.assignedClassIds])
 
   useEffect(() => {
     void load()
@@ -33,8 +60,8 @@ export function Dashboard() {
   return (
     <section className="space-y-8">
       <PageHeader
-        title="Attendance at a glance"
-        description="A live view of the people, classes, and attendance that need your attention."
+        title={isTeacher ? 'Your teaching dashboard' : 'Attendance at a glance'}
+        description={isTeacher ? 'A live view of your first assigned course and today’s roll-call workspace.' : 'A live view of the people, classes, and attendance that need your attention.'}
       />
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
@@ -126,6 +153,19 @@ export function Dashboard() {
               </div>
             </article>
           </div>
+
+          {monthlyReport && (
+            <div className="grid gap-6 xl:grid-cols-[1.35fr_.85fr]">
+              <AttendanceTrend
+                rows={monthlyReport.students}
+                title={isTeacher ? 'Your course — attendance watchlist' : 'Institution — attention watchlist'}
+              />
+              <AttendanceDistribution
+                rows={monthlyReport.students}
+                label={isTeacher ? 'Your assigned course' : 'All-class monthly cohort'}
+              />
+            </div>
+          )}
         </>
       )}
     </section>

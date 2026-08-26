@@ -1,5 +1,12 @@
 import axios from 'axios'
-import type { CreateTeacherDto, TeacherDto, UpdateTeacherDto } from '../types'
+import type {
+  CreateTeacherDto,
+  DashboardAnalyticsDto,
+  MarkAttendanceRequestDto,
+  ReportsAnalyticsDto,
+  TeacherDto,
+  UpdateTeacherDto,
+} from '../types'
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5289/api',
@@ -46,6 +53,36 @@ export async function updateTeacher(id: string, payload: UpdateTeacherDto): Prom
 
 export async function deactivateTeacher(id: string): Promise<void> {
   await apiClient.post(`/teachers/${id}/deactivate`)
+}
+
+/**
+ * Operational real-time analytics for the Dashboard.
+ * GET /api/analytics/dashboard
+ * Role scoping is derived from the bearer token.
+ */
+export async function getDashboardAnalytics(): Promise<DashboardAnalyticsDto> {
+  const { data } = await apiClient.get<DashboardAnalyticsDto>('/analytics/dashboard')
+  return data
+}
+
+/**
+ * Historical analytical reports.
+ * GET /api/analytics/reports?startDate=&endDate=&classId=
+ */
+export async function getReportsAnalytics(
+  startDate: string,
+  endDate: string,
+  classId?: string,
+): Promise<ReportsAnalyticsDto> {
+  const { data } = await apiClient.get<ReportsAnalyticsDto>('/analytics/reports', {
+    params: { startDate, endDate, classId: classId || undefined },
+  })
+  return data
+}
+
+/** Batch attendance mark — POST /api/attendance/mark */
+export async function markAttendance(payload: MarkAttendanceRequestDto): Promise<void> {
+  await apiClient.post('/attendance/mark', payload)
 }
 
 export default apiClient

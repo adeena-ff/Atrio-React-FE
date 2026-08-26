@@ -6,9 +6,9 @@ const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/students', label: 'Students', icon: Users },
   { to: '/classes', label: 'Classes', icon: GraduationCap },
+  { to: '/teachers', label: 'Teachers', icon: UserCog, adminOnly: true },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
   { to: '/reports', label: 'Reports', icon: LineChart },
-  { to: '/teachers', label: 'Teachers', icon: UserCog, adminOnly: true },
 ] as const
 
 export function Sidebar() {

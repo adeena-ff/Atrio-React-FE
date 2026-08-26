@@ -2,6 +2,8 @@ import { CheckCheck } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
+import { useAuth } from '../context/AuthContext'
+import { useVisibleClasses } from '../hooks/useVisibleClasses'
 import apiClient from '../services/api'
 import type { AttendanceRecordDto, AttendanceStatus, ClassDto } from '../types'
 
@@ -27,12 +29,15 @@ const statusStyles: Record<AttendanceStatus, { idle: string; active: string }> =
 }
 
 export function Attendance() {
+  const { user, isTeacher } = useAuth()
   const [classes, setClasses] = useState<ClassDto[]>([])
   const [classId, setClassId] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [records, setRecords] = useState<AttendanceRecordDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const { classes: visibleClasses, label: classLabel, isScopedToAssignments } = useVisibleClasses(classes)
+  const assignedClassIds = user?.assignedClassIds
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -40,7 +45,11 @@ export function Attendance() {
     try {
       const result = await apiClient.get<ClassDto[]>('/classes')
       setClasses(result.data)
-      const selected = classId || result.data[0]?.id
+      const scoped =
+        isTeacher && assignedClassIds?.length
+          ? result.data.filter((c) => assignedClassIds.includes(c.id))
+          : result.data
+      const selected = (classId && scoped.some((c) => c.id === classId) ? classId : undefined) || scoped[0]?.id
       if (selected) {
         setClassId(selected)
         setRecords(
@@ -50,13 +59,15 @@ export function Attendance() {
             })
           ).data,
         )
+      } else {
+        setRecords([])
       }
     } catch (e) {
       setError(errorMessage(e, 'Attendance roll call could not be loaded.'))
     } finally {
       setLoading(false)
     }
-  }, [classId, date])
+  }, [assignedClassIds, classId, date, isTeacher])
 
   useEffect(() => {
     void load()
@@ -96,17 +107,23 @@ export function Attendance() {
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
       <div className="glass mb-6 grid gap-3 rounded-2xl p-4 shadow-xl sm:grid-cols-2 sm:p-5">
-        <select
-          className="field px-4 py-2.5"
-          value={classId}
-          onChange={(e) => setClassId(e.target.value)}
-        >
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div>
+          {isScopedToAssignments && (
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-indigo-300">{classLabel}</p>
+          )}
+          <select
+            className="field px-4 py-2.5"
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            aria-label={classLabel}
+          >
+            {visibleClasses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <input
           className="field px-4 py-2.5"
           type="date"

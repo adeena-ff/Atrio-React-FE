@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ErrorBanner, LoadingState, errorMessage } from '../components/common/AsyncState'
 import { PageHeader } from '../components/common/PageHeader'
 import { AttendanceBadge } from '../components/common/StatusBadge'
+import { useVisibleClasses } from '../hooks/useVisibleClasses'
 import apiClient from '../services/api'
 import type { ClassDto, MonthlyReportDto } from '../types'
 
@@ -12,6 +13,7 @@ export function Reports() {
   const [error, setError] = useState('')
   const reportYear = new Date().getFullYear()
   const reportMonth = new Date().getMonth() + 1
+  const { classes: visibleClasses, label: classLabel, isScopedToAssignments } = useVisibleClasses(classes)
 
   const load = useCallback(async () => {
     setError('')
@@ -43,18 +45,24 @@ export function Reports() {
 
       {error && <ErrorBanner message={error} retry={() => void load()} />}
 
-      <select
-        className="field mb-6 max-w-sm px-4 py-2.5"
-        value={classId}
-        onChange={(e) => setClassId(e.target.value)}
-      >
-        <option value="">All classes</option>
-        {classes.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      <div className="mb-6 max-w-sm">
+        {isScopedToAssignments && (
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-indigo-300">{classLabel}</p>
+        )}
+        <select
+          className="field px-4 py-2.5"
+          value={classId}
+          onChange={(e) => setClassId(e.target.value)}
+          aria-label={classLabel}
+        >
+          <option value="">{isScopedToAssignments ? classLabel : 'All classes'}</option>
+          {visibleClasses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {!report ? (
         <LoadingState label="Loading monthly report..." />
